@@ -76,7 +76,7 @@ picture_cabac::~picture_cabac()
 
 void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data& sd)
 {
-    mb *mb;
+    mb* mb;
 
     int slice_qp = std::clamp(
         m_context_variables.QPy - 6 * static_cast<int>(m_decoder.m_active_sps->bit_depth_luma_minus8), 0, 51);
@@ -103,6 +103,94 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
 /*===========================================================================*\
  * private function definitions
 \*===========================================================================*/
+/**
+ * 9.3.3.1.1.2 Derivation process of ctxIdxInc for the syntax element mb_field_decoding_flag
+ *
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 70
+ */
+int picture_cabac::decode_mb_field_decoding_flag()
+{
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+    ctxIdxInc += (curr_mb->A != nullptr) && (curr_mb->A->type & MB_TYPE_INTERLACED);
+    ctxIdxInc += (curr_mb->B != nullptr) && (curr_mb->B->type & MB_TYPE_INTERLACED);
+
+    return m_cabac_decoder.decode_decision(70 + ctxIdxInc);
+}
+
+int picture_cabac::decode_mb_type()
+{
+    return -1;
+}
+
+int picture_cabac::decode_transform_size_8x8_flag()
+{
+    return -1;
+}
+
+int picture_cabac::decode_cbp_luma()
+{
+    return -1;
+}
+
+int picture_cabac::decode_cbp_chroma()
+{
+    return -1;
+}
+
+int picture_cabac::decode_mb_qp_delta()
+{
+    return -1;
+}
+
+int picture_cabac::decode_prev_intra4x4_pred_mode_flag()
+{
+    return -1;
+}
+
+int picture_cabac::decode_rem_intra4x4_pred_mode()
+{
+    return -1;
+}
+
+int picture_cabac::decode_prev_intra8x8_pred_mode_flag()
+{
+    return -1;
+}
+
+int picture_cabac::decode_rem_intra8x8_pred_mode()
+{
+    return -1;
+}
+
+
+int picture_cabac::decode_intra_chroma_pred_mode()
+{
+    return -1;
+}
+
+int picture_cabac::decode_coded_block_flag()
+{
+    return -1;
+}
+
+int picture_cabac::decode_significant_coeff_flag()
+{
+    return -1;
+}
+
+int picture_cabac::decode_last_significant_coeff_flag()
+{
+    return -1;
+}
+
+int picture_cabac::decode_coeff_abs_level_minus1()
+{
+    return -1;
+}
 
 /*===========================================================================*\
  * local function definitions
