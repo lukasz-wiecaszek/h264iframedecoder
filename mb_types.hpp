@@ -57,6 +57,7 @@
 #define MB_TYPE_QUANT          0x00020000
 #define MB_TYPE_CBP            0x00040000
 #define MB_TYPE_8x8DCT         0x00080000
+#define MB_TYPE_SWITCHING      0x00100000
 
 #define MB_IS_INTRA_4x4(x)      (((x) & MB_TYPE_INTRA_NxN) == MB_TYPE_INTRA_4x4)
 #define MB_IS_INTRA_8x8(x)      (((x) & MB_TYPE_INTRA_NxN) == MB_TYPE_INTRA_8x8)

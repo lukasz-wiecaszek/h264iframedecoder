@@ -54,7 +54,8 @@ public:
 
 private:
     int decode_mb_field_decoding_flag();
-    int decode_mb_type();
+    int decode_mb_type_si_slice();
+    int decode_mb_type_i_slice();
     int decode_transform_size_8x8_flag();
     int decode_cbp_luma();
     int decode_cbp_chroma();

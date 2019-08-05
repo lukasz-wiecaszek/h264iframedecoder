@@ -112,18 +112,77 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
  */
 int picture_cabac::decode_mb_field_decoding_flag()
 {
+    int ctxIdxOffset = 70;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
     ctxIdxInc += (curr_mb->A != nullptr) && (curr_mb->A->type & MB_TYPE_INTERLACED);
     ctxIdxInc += (curr_mb->B != nullptr) && (curr_mb->B->type & MB_TYPE_INTERLACED);
 
-    return m_cabac_decoder.decode_decision(70 + ctxIdxInc);
+    return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
-int picture_cabac::decode_mb_type()
+/**
+ * 9.3.3.1.1.3 Derivation process of ctxIdxInc for the syntax element mb_type
+ *
+ * SI slices only
+ *   Type of binarization: as specified in subclause 9.3.2.5
+ *   maxBinIdxCtx:
+ *     prefix: 0
+ *     suffix: 6
+ *   ctxIdxOffset:
+ *     prefix: 0
+ *     suffix: 3
+ */
+int picture_cabac::decode_mb_type_si_slice()
 {
-    return -1;
+    int ctxIdxOffset = 0;
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+    ctxIdxInc += ((curr_mb->left != nullptr) && ((curr_mb->left->type & MB_TYPE_SWITCHING) == 0));
+    ctxIdxInc += ((curr_mb->top != nullptr) && ((curr_mb->top->type & MB_TYPE_SWITCHING) == 0));
+
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
+        return 0; /* SI 4x4 */
+
+    return 1 + decode_mb_type_i_slice();
+}
+
+/**
+ * 9.3.3.1.1.3 Derivation process of ctxIdxInc for the syntax element mb_type
+ *
+ * I slices only
+ *   Type of binarization: as specified in subclause 9.3.2.5
+ *   maxBinIdxCtx: 6
+ *   ctxIdxOffset: 3
+ */
+int picture_cabac::decode_mb_type_i_slice()
+{
+    int ctxIdxOffset = 3;
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+    ctxIdxInc += ((curr_mb->left != nullptr) && ((curr_mb->left->type & MB_TYPE_INTRA_NxN) == 0));
+    ctxIdxInc += ((curr_mb->top != nullptr) && ((curr_mb->top->type & MB_TYPE_INTRA_NxN) == 0));
+
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
+        return 0; /* SI 4x4 */
+
+    if (m_cabac_decoder.decode_terminate() == 1)
+        return 25; /* PCM */
+
+    int mb_type = 1; /* I16x16 */
+
+    mb_type += 12 * m_cabac_decoder.decode_decision(ctxIdxOffset + 3); /* cbp_luma */
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + 4)) /* cbp_chroma */
+        mb_type += 4 + 4 * m_cabac_decoder.decode_decision(ctxIdxOffset + 5);
+
+    mb_type += 2 * m_cabac_decoder.decode_decision(ctxIdxOffset + 6);
+    mb_type += 1 * m_cabac_decoder.decode_decision(ctxIdxOffset + 7);
+
+    return mb_type;
+
 }
 
 int picture_cabac::decode_transform_size_8x8_flag()
