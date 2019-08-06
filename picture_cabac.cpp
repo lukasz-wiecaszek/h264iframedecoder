@@ -185,9 +185,23 @@ int picture_cabac::decode_mb_type_i_slice()
 
 }
 
+/**
+ * 9.3.3.1.1.10 Derivation process of ctxIdxInc for the syntax element transform_size_8x8_flag
+ *
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 399
+ */
 int picture_cabac::decode_transform_size_8x8_flag()
 {
-    return -1;
+    int ctxIdxOffset = 399;
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+    ctxIdxInc += (curr_mb->A != nullptr) && (MB_IS_INTRA_8x8(curr_mb->A->type));
+    ctxIdxInc += (curr_mb->B != nullptr) && (MB_IS_INTRA_8x8(curr_mb->B->type));
+
+    return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
 int picture_cabac::decode_cbp_luma()
