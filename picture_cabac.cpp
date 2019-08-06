@@ -204,14 +204,82 @@ int picture_cabac::decode_transform_size_8x8_flag()
     return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
+/**
+ * 9.3.3.1.1.4 Derivation process of ctxIdxInc for the syntax element coded_block_pattern
+ *
+ * Type of binarization: as specified in subclause 9.3.2.6
+ * maxBinIdxCtx: 3
+ * ctxIdxOffset: 73
+ */
 int picture_cabac::decode_cbp_luma()
 {
-    return -1;
+    int cbp_a, cbp_b, cbp = 0;
+    int ctxIdxOffset = 73;
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+
+    if (curr_mb->left)
+        cbp_a = (((curr_mb->left_pair[0]->cbp_luma >> (m_context_variables.left_blocks[0] & (~1))) & 2) << 0) |
+                (((curr_mb->left_pair[1]->cbp_luma >> (m_context_variables.left_blocks[2] & (~1))) & 2) << 2);
+    else
+        cbp_a = 0x0F;
+
+    if (curr_mb->top)
+        cbp_b = curr_mb->top->cbp_luma;
+    else
+        cbp_b = 0x0F;
+
+    ctxIdxInc = !(cbp_a & 0x02) + 2 * !(cbp_b & 0x04);
+    cbp += m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+    ctxIdxInc = !(cbp   & 0x01) + 2 * !(cbp_b & 0x08);
+    cbp += m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) << 1;
+    ctxIdxInc = !(cbp_a & 0x08) + 2 * !(cbp   & 0x01);
+    cbp += m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) << 2;
+    ctxIdxInc = !(cbp   & 0x04) + 2 * !(cbp   & 0x02);
+    cbp += m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) << 3;
+
+    return cbp;
 }
 
+/**
+ * 9.3.3.1.1.4 Derivation process of ctxIdxInc for the syntax element coded_block_pattern
+ *
+ * Type of binarization: as specified in subclause 9.3.2.6
+ * maxBinIdxCtx: 1
+ * ctxIdxOffset: 77
+ */
 int picture_cabac::decode_cbp_chroma()
 {
-    return -1;
+    int cbp_a, cbp_b;
+    int ctxIdxOffset = 77;
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+    if (curr_mb->left)
+        cbp_a = curr_mb->left->cbp_chroma & 0x03;
+    else
+        cbp_a = 0;
+
+    if (curr_mb->top)
+        cbp_b = curr_mb->top->cbp_chroma & 0x03;
+    else
+        cbp_b = 0;
+
+    ctxIdxInc = 0;
+    if (cbp_a > 0)
+        ctxIdxInc++;
+    if (cbp_b > 0)
+        ctxIdxInc += 2;
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
+        return 0;
+
+    ctxIdxInc = 4;
+    if (cbp_a == 2)
+        ctxIdxInc++;
+    if (cbp_b == 2)
+        ctxIdxInc += 2;
+    return 1 + m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
 int picture_cabac::decode_mb_qp_delta()
