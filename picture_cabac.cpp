@@ -108,7 +108,7 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
  *
  * Type of binarization: FL, cMax = 1
  * maxBinIdxCtx: 0
- * ctxIdxOffset: 70
+ * ctxIdxOffset: 70..72
  */
 int picture_cabac::decode_mb_field_decoding_flag()
 {
@@ -131,8 +131,8 @@ int picture_cabac::decode_mb_field_decoding_flag()
  *     prefix: 0
  *     suffix: 6
  *   ctxIdxOffset:
- *     prefix: 0
- *     suffix: 3
+ *     prefix: 0..2
+ *     suffix: 3..10
  */
 int picture_cabac::decode_mb_type_si_slice()
 {
@@ -155,7 +155,7 @@ int picture_cabac::decode_mb_type_si_slice()
  * I slices only
  *   Type of binarization: as specified in subclause 9.3.2.5
  *   maxBinIdxCtx: 6
- *   ctxIdxOffset: 3
+ *   ctxIdxOffset: 3..10
  */
 int picture_cabac::decode_mb_type_i_slice()
 {
@@ -209,7 +209,7 @@ int picture_cabac::decode_transform_size_8x8_flag()
  *
  * Type of binarization: as specified in subclause 9.3.2.6
  * maxBinIdxCtx: 3
- * ctxIdxOffset: 73
+ * ctxIdxOffset: 73..76
  */
 int picture_cabac::decode_cbp_luma()
 {
@@ -217,7 +217,6 @@ int picture_cabac::decode_cbp_luma()
     int ctxIdxOffset = 73;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
-
 
     if (curr_mb->left)
         cbp_a = (((curr_mb->left_pair[0]->cbp_luma >> (m_context_variables.left_blocks[0] & (~1))) & 2) << 0) |
@@ -247,7 +246,7 @@ int picture_cabac::decode_cbp_luma()
  *
  * Type of binarization: as specified in subclause 9.3.2.6
  * maxBinIdxCtx: 1
- * ctxIdxOffset: 77
+ * ctxIdxOffset: 77..84
  */
 int picture_cabac::decode_cbp_chroma()
 {
@@ -287,7 +286,7 @@ int picture_cabac::decode_cbp_chroma()
  *
  * Type of binarization: as specified in subclause 9.3.2.7
  * maxBinIdxCtx: 2
- * ctxIdxOffset: 60
+ * ctxIdxOffset: 60..63
  */
 int picture_cabac::decode_mb_qp_delta()
 {
@@ -314,30 +313,99 @@ int picture_cabac::decode_mb_qp_delta()
     return qp_delta;
 }
 
+/**
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 68
+ */
 int picture_cabac::decode_prev_intra4x4_pred_mode_flag()
 {
-    return -1;
+    int ctxIdxOffset = 68;
+    int ctxIdxInc = 0;
+
+    return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
+/**
+ * Type of binarization: FL, cMax = 7
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 69
+ */
 int picture_cabac::decode_rem_intra4x4_pred_mode()
 {
-    return -1;
+    int mode = 0;
+    int ctxIdxOffset = 69;
+    int ctxIdxInc = 0;
+
+    mode += 1 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+    mode += 2 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+    mode += 4 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+
+    return mode;
 }
 
+/**
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 68
+ */
 int picture_cabac::decode_prev_intra8x8_pred_mode_flag()
 {
-    return -1;
+    int ctxIdxOffset = 68;
+    int ctxIdxInc = 0;
+
+    return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
+/**
+ * Type of binarization: FL, cMax = 7
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 69
+ */
 int picture_cabac::decode_rem_intra8x8_pred_mode()
 {
-    return -1;
+    int mode = 0;
+    int ctxIdxOffset = 69;
+    int ctxIdxInc = 0;
+
+    mode += 1 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+    mode += 2 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+    mode += 4 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
+
+    return mode;
 }
 
-
+/**
+ * 9.3.3.1.1.8 Derivation process of ctxIdxInc for the syntax element intra_chroma_pred_mode
+ *
+ * Type of binarization: TU, cMax = 3
+ * maxBinIdxCtx: 1
+ * ctxIdxOffset: 64..67
+ */
 int picture_cabac::decode_intra_chroma_pred_mode()
 {
-    return -1;
+    int ctxIdxOffset = 64;
+    int ctxIdxInc = 0;
+    mb* curr_mb = m_context_variables.curr_mb;
+
+    /* No need to test for MB_IS_INTRA_NxN and MB_IS_INTRA_16x16,
+       as intra_chroma_pred_mode shall be set to 0 for those macroblocks */
+
+    ctxIdxInc += (curr_mb->left != nullptr) && (curr_mb->left->intra_chroma_pred_mode != 0);
+    ctxIdxInc += (curr_mb->top != nullptr) && (curr_mb->top->intra_chroma_pred_mode != 0);
+
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
+        return 0;
+
+    ctxIdxInc = 3;
+
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
+        return 1;
+
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
+        return 2;
+    else
+        return 3;
 }
 
 int picture_cabac::decode_coded_block_flag()
