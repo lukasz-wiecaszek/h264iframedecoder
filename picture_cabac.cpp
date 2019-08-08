@@ -282,9 +282,36 @@ int picture_cabac::decode_cbp_chroma()
     return 1 + m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
 }
 
+/**
+ * 9.3.3.1.1.5 Derivation process of ctxIdxInc for the syntax element mb_qp_delta
+ *
+ * Type of binarization: as specified in subclause 9.3.2.7
+ * maxBinIdxCtx: 2
+ * ctxIdxOffset: 60
+ */
 int picture_cabac::decode_mb_qp_delta()
 {
-    return -1;
+    int qp_delta = 0;
+    int ctxIdxOffset = 60;
+    int ctxIdxInc;
+
+    ctxIdxInc = (m_context_variables.lastQPdelta != 0) ? 1 : 0;
+    if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc)) {
+        ctxIdxInc = 2;
+        qp_delta = 1;
+        while (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc)) {
+            ctxIdxInc = 3;
+            qp_delta++;
+        }
+
+        /* Table 9-3 – Assignment of syntax element to codeNum for signed Exp-Golomb coded syntax elements se(v) */
+        if (qp_delta & 0x01)
+            qp_delta =  ((qp_delta + 1) >> 1);
+        else
+            qp_delta = -((qp_delta + 1) >> 1);
+    }
+
+    return qp_delta;
 }
 
 int picture_cabac::decode_prev_intra4x4_pred_mode_flag()
