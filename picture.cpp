@@ -130,6 +130,10 @@ void picture::init_coxtext_variables(const h264::slice_header& sh)
     m_context_variables.QPc[0] = m_decoder.m_chroma_qp_table[0][m_context_variables.QPy];
     m_context_variables.QPc[1] = m_decoder.m_chroma_qp_table[1][m_context_variables.QPy];
 
+    m_context_variables.chroma_array_type = sps->chroma_format_idc;
+    if (sps->chroma_format_idc == 3 && sps->separate_colour_plane_flag)
+        m_context_variables.chroma_array_type = 0;
+
     m_context_variables.left_blocks = nullptr; // it will be evaluated in calculate_neighbours_part2()
 }
 

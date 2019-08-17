@@ -1,10 +1,7 @@
 /**
- * @file picture_cabac.hpp
+ * @file mb_cache.hpp
  *
- * Definition of H.264 (ISO/IEC 14496-10) picture structure.
- *
- * Entropy decoding method to be applied for the syntax elements
- * for which two descriptors appear in the syntax tables is CABAC (see subclause 9.3).
+ * ...
  *
  * @author Lukasz Wiecaszek <lukasz.wiecaszek@gmail.com>
  *
@@ -18,18 +15,18 @@
  * See the GNU General Public License for more details.
  */
 
-#ifndef _PICTURE_CABAC_HPP_
-#define _PICTURE_CABAC_HPP_
+#ifndef _MB_CACHE_HPP_
+#define _MB_CACHE_HPP_
 
 /*===========================================================================*\
  * system header files
 \*===========================================================================*/
+#include <cstdint>
+#include <array>
 
 /*===========================================================================*\
  * project header files
 \*===========================================================================*/
-#include "picture.hpp"
-#include "h264_cabac_decoder.hpp"
 
 /*===========================================================================*\
  * preprocessor #define constants and macros
@@ -40,42 +37,10 @@
 \*===========================================================================*/
 namespace ymn
 {
-
 namespace h264
 {
 
-class picture_cabac : public picture
-{
-public:
-    explicit picture_cabac(const h264_decoder& decoder, const h264::slice_header& sh);
-    ~picture_cabac() override;
-
-    void decode(const h264::slice_header& sh, const h264::slice_data& sd) override;
-
-private:
-    void non_zero_count_cache_init(uint32_t mb_type);
-    void non_zero_count_save();
-
-    int decode_mb_field_decoding_flag();
-    int decode_mb_type_si_slice();
-    int decode_mb_type_i_slice();
-    int decode_transform_size_8x8_flag();
-    int decode_cbp_luma();
-    int decode_cbp_chroma();
-    int decode_mb_qp_delta();
-    int decode_prev_intra4x4_pred_mode_flag();
-    int decode_rem_intra4x4_pred_mode();
-    int decode_prev_intra8x8_pred_mode_flag();
-    int decode_rem_intra8x8_pred_mode();
-    int decode_intra_chroma_pred_mode();
-    int decode_coded_block_flag(int ctxBlockCat, int idx);
-    int decode_significant_coeff_flag();
-    int decode_last_significant_coeff_flag();
-    int decode_coeff_abs_level_minus1();
-
-private:
-    h264_cabac_decoder m_cabac_decoder;
-};
+typedef std::array<uint8_t, 5 * 8> mb_cache;
 
 } /* end of namespace h264 */
 } /* end of namespace ymn */
@@ -88,6 +53,31 @@ namespace ymn
 namespace h264
 {
 
+/** 
+ * mb_cache organization:
+ * 
+ *    0 1 2 3 4 5 6 7
+ * 0
+ * 1          o-o o-o
+ *             / / /
+ * 2          o-o o-o
+ * 3          o-o o-o
+ *             / / /
+ * 4          o-o o-o
+ */
+const uint8_t mb_cache_idx[16] = 
+{
+    1 * 8 + 4, 1 * 8 + 5, 
+    2 * 8 + 4, 2 * 8 + 5,
+    1 * 8 + 6, 1 * 8 + 7, 
+    2 * 8 + 6, 2 * 8 + 7,
+    
+    3 * 8 + 4, 3 * 8 + 5, 
+    4 * 8 + 4, 4 * 8 + 5,
+    3 * 8 + 6, 3 * 8 + 7, 
+    4 * 8 + 6, 4 * 8 + 7,
+};
+
 } /* end of namespace h264 */
 } /* end of namespace ymn */
 
@@ -96,7 +86,10 @@ namespace h264
 \*===========================================================================*/
 namespace ymn
 {
+namespace h264
+{
 
+} /* end of namespace h264 */
 } /* end of namespace ymn */
 
 /*===========================================================================*\
@@ -104,7 +97,10 @@ namespace ymn
 \*===========================================================================*/
 namespace ymn
 {
+namespace h264
+{
 
+} /* end of namespace h264 */
 } /* end of namespace ymn */
 
-#endif /* _PICTURE_CABAC_HPP_ */
+#endif /* _MB_CACHE_HPP_ */

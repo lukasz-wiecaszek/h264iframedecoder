@@ -85,6 +85,9 @@ struct mb
     /* luma quantization parameter */
     int luma_qp;
 
+#define MB_NZC_DC_BLOCK_IDX_Y  (16 * COLOUR_COMPONENTS_MAX + to_int(colour_component_e::Y))
+#define MB_NZC_DC_BLOCK_IDX_Cb (16 * COLOUR_COMPONENTS_MAX + to_int(colour_component_e::Cb))
+#define MB_NZC_DC_BLOCK_IDX_Cr (16 * COLOUR_COMPONENTS_MAX + to_int(colour_component_e::Cr))
     /* Number of non-zero AC coefficiets in 4x4 blocks in Y,Cb and Cr components.
      Last three indexes store number of non-zero DC coefficients in Y,Cb and Cr
      components respectively. */

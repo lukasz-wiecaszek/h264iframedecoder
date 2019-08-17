@@ -26,6 +26,7 @@
  * project header files
 \*===========================================================================*/
 #include "picture_cabac.hpp"
+#include "colour_component.hpp"
 #include "h264_decoder.hpp"
 
 /*===========================================================================*\
@@ -36,6 +37,20 @@ using namespace ymn::h264;
 /*===========================================================================*\
  * preprocessor #define constants and macros
 \*===========================================================================*/
+#define CAT_16x16_DC_Y    0
+#define CAT_16x16_AC_Y    1
+#define CAT_4x4_Y         2
+#define CAT_CHROMA_DC     3
+#define CAT_CHROMA_AC     4
+#define CAT_8x8_Y         5
+#define CAT_16x16_DC_Cb   6
+#define CAT_16x16_AC_Cb   7
+#define CAT_4x4_Cb        8
+#define CAT_8x8_Cb        9
+#define CAT_16x16_DC_Cr  10
+#define CAT_16x16_AC_Cr  11
+#define CAT_4x4_Cr       12
+#define CAT_8x8_Cr       13
 
 /*===========================================================================*\
  * local type definitions
@@ -103,6 +118,128 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
 /*===========================================================================*\
  * private function definitions
 \*===========================================================================*/
+void picture_cabac::non_zero_count_cache_init(uint32_t mb_type)
+{
+    const mb* curr_mb = m_context_variables.curr_mb;
+    const uint8_t* left_blocks = m_context_variables.left_blocks;
+
+    mb_cache& nzc_cache_y  = m_context_variables.non_zero_count[to_int(colour_component_e::Y)];
+    mb_cache& nzc_cache_cb = m_context_variables.non_zero_count[to_int(colour_component_e::Cb)];
+    mb_cache& nzc_cache_cr = m_context_variables.non_zero_count[to_int(colour_component_e::Cr)];
+
+    if (curr_mb->top) {
+        const uint8_t* nzc = curr_mb->top->non_zero_count;
+
+        std::memcpy(&nzc_cache_y[0 * 8 + 4], &nzc[3 * 4], 4);
+
+        if (m_context_variables.chroma_array_type == 1 ||
+            m_context_variables.chroma_array_type == 2) {
+            std::memcpy(&nzc_cache_cb[0 * 8 + 4], &nzc[5 * 4], 4);
+            std::memcpy(&nzc_cache_cr[0 * 8 + 4], &nzc[9 * 4], 4);
+        }
+        else
+        if (m_context_variables.chroma_array_type == 3) {
+            std::memcpy(&nzc_cache_cb[0 * 8 + 4], &nzc[ 7 * 4], 4);
+            std::memcpy(&nzc_cache_cr[0 * 8 + 4], &nzc[11 * 4], 4);
+        }
+        else {
+            /* do nothing */
+        }
+    }
+    else {
+        // 0x40 (64) means "value not available"
+        uint32_t top_mb_not_available = m_decoder.m_active_pps->entropy_coding_mode_flag && !MB_IS_INTRA(mb_type) ? 0 : 0x40404040;
+
+#define DEREFERENCE(TYPE, PTR) (*(reinterpret_cast<TYPE*>(PTR)))
+
+        DEREFERENCE(uint32_t, &nzc_cache_y [0 * 8 + 4]) = top_mb_not_available;
+        DEREFERENCE(uint32_t, &nzc_cache_cb[0 * 8 + 4]) = top_mb_not_available;
+        DEREFERENCE(uint32_t, &nzc_cache_cr[0 * 8 + 4]) = top_mb_not_available;
+
+#undef DEREFERENCE
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        if (curr_mb->left_pair[i]) {
+            const uint8_t* nzc = curr_mb->left_pair[i]->non_zero_count;
+
+            nzc_cache_y[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i]];
+            nzc_cache_y[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i]];
+
+            if (m_context_variables.chroma_array_type == 1) {
+                nzc_cache_cb[1 * 8 + 3 + 8 * i] = nzc[left_blocks[8 + 4 + 2 * i]];
+                nzc_cache_cr[1 * 8 + 3 + 8 * i] = nzc[left_blocks[8 + 5 + 2 * i]];
+            }
+            else
+            if (m_context_variables.chroma_array_type == 2) {
+                nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] - 2 + 4 * 4];
+                nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] - 2 + 4 * 4];
+                nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] - 2 + 8 * 4];
+                nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] - 2 + 8 * 4];
+            }
+            else
+            if (m_context_variables.chroma_array_type == 3) {
+                nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] + 4 * 4];
+                nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] + 4 * 4];
+                nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] + 8 * 4];
+                nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] + 8 * 4];
+            }
+            else {
+                /* do nothing */
+            }
+        }
+        else {
+            nzc_cache_y [1 * 8 + 3 + 2 * 8 * i] =
+            nzc_cache_y [2 * 8 + 3 + 2 * 8 * i] =
+            nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] =
+            nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] =
+            nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] =
+            nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] =
+                m_decoder.m_active_pps->entropy_coding_mode_flag && !MB_IS_INTRA(mb_type) ? 0 : 0x40;
+        }
+    }
+
+    if ((m_context_variables.chroma_array_type == 3) && (MB_IS_INTRA_8x8(mb_type))) {
+        //TODO: implement this part
+    }
+}
+
+void picture_cabac::non_zero_count_save()
+{
+    mb* curr_mb = m_context_variables.curr_mb;
+    uint8_t* nzc = curr_mb->non_zero_count;
+
+    const mb_cache& nzc_cache_y  = m_context_variables.non_zero_count[to_int(colour_component_e::Y)];
+    const mb_cache& nzc_cache_cb = m_context_variables.non_zero_count[to_int(colour_component_e::Cb)];
+    const mb_cache& nzc_cache_cr = m_context_variables.non_zero_count[to_int(colour_component_e::Cr)];
+
+    nzc[MB_NZC_DC_BLOCK_IDX_Y] = nzc_cache_y[0];
+
+    std::memcpy(&nzc[0 * 4], &nzc_cache_y[1 * 8 + 4], 4);
+    std::memcpy(&nzc[1 * 4], &nzc_cache_y[2 * 8 + 4], 4);
+    std::memcpy(&nzc[2 * 4], &nzc_cache_y[3 * 8 + 4], 4);
+    std::memcpy(&nzc[3 * 4], &nzc_cache_y[4 * 8 + 4], 4);
+
+    if (m_context_variables.chroma_array_type == 0)
+        return;
+
+    nzc[MB_NZC_DC_BLOCK_IDX_Cb] = nzc_cache_cb[0];
+    nzc[MB_NZC_DC_BLOCK_IDX_Cr] = nzc_cache_cr[0];
+
+    std::memcpy(&nzc[4 * 4], &nzc_cache_cb[1 * 8 + 4], 4);
+    std::memcpy(&nzc[5 * 4], &nzc_cache_cb[2 * 8 + 4], 4);
+    std::memcpy(&nzc[8 * 4], &nzc_cache_cr[1 * 8 + 4], 4);
+    std::memcpy(&nzc[9 * 4], &nzc_cache_cr[2 * 8 + 4], 4);
+
+    if (m_context_variables.chroma_array_type < 3)
+        return;
+
+    std::memcpy(&nzc[ 6 * 4], &nzc_cache_cb[3 * 8 + 4], 4);
+    std::memcpy(&nzc[ 7 * 4], &nzc_cache_cb[4 * 8 + 4], 4);
+    std::memcpy(&nzc[10 * 4], &nzc_cache_cr[3 * 8 + 4], 4);
+    std::memcpy(&nzc[11 * 4], &nzc_cache_cr[4 * 8 + 4], 4);
+}
+
 /**
  * 9.3.3.1.1.2 Derivation process of ctxIdxInc for the syntax element mb_field_decoding_flag
  *
@@ -303,7 +440,7 @@ int picture_cabac::decode_mb_qp_delta()
             qp_delta++;
         }
 
-        /* Table 9-3 – Assignment of syntax element to codeNum for signed Exp-Golomb coded syntax elements se(v) */
+        /* Table 9-3 Assignment of syntax element to codeNum for signed Exp-Golomb coded syntax elements se(v) */
         if (qp_delta & 0x01)
             qp_delta =  ((qp_delta + 1) >> 1);
         else
@@ -408,9 +545,74 @@ int picture_cabac::decode_intra_chroma_pred_mode()
         return 3;
 }
 
-int picture_cabac::decode_coded_block_flag()
+/**
+ * 9.3.3.1.1.9 Derivation process of ctxIdxInc for the syntax element coded_block_flag
+ *
+ * ctxBlockCat < 5
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 85..104
+ *
+ * 5 < ctxBlockCat < 9
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 460..471
+ *
+ * 9 < ctxBlockCat < 13
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 472..483
+ *
+ * ctxBlockCat = 5 || ctxBlockCat = 9 || ctxBlockCat = 13
+ * Type of binarization: FL, cMax = 1
+ * maxBinIdxCtx: 0
+ * ctxIdxOffset: 1012..1023
+ */
+int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
 {
-    return -1;
+
+    /* Table 9-40 â€“ Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+       significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
+    static const int base_ctx[14] = {
+        85 + 0, 85 + 4, 85 + 8, 85 + 12, 85 + 16, // ctxBlockCat < 5
+        1012,                                     // ctxBlockCat == 5
+        460 + 0, 460 + 4, 460 + 8,                // 5 < ctxBlockCat < 9
+        1012 + 4,                                 // ctxBlockCat == 9
+        472 + 0, 472 + 4, 472 + 8,                // 9 < ctxBlockCat < 13
+        1012 + 8                                  // ctxBlockCat == 13
+    };
+
+    int nza, nzb;
+    int ctxIdxInc = 0;
+
+    if (idx < 16 * COLOUR_COMPONENTS_MAX) { /* ac */
+        idx /= COLOUR_COMPONENTS_MAX;
+        mb_cache& nzc_cache = m_context_variables.non_zero_count[idx];
+
+        nza = nzc_cache[mb_cache_idx[idx] - 1];
+        nzb = nzc_cache[mb_cache_idx[idx] - 8];
+    }
+    else { /* dc */
+        mb* curr_mb = m_context_variables.curr_mb;
+
+        if (curr_mb->left)
+            nza = curr_mb->left->non_zero_count[idx];
+        else
+            nza = MB_IS_INTRA(curr_mb->type);
+
+        if (curr_mb->top)
+            nzb = curr_mb->top->non_zero_count[idx];
+        else
+            nzb = MB_IS_INTRA(curr_mb->type);
+    }
+
+    if (nza > 0)
+        ctxIdxInc += 1;
+
+    if (nzb > 0)
+        ctxIdxInc += 2;
+
+    return m_cabac_decoder.decode_decision(base_ctx[ctxBlockCat] + ctxIdxInc);
 }
 
 int picture_cabac::decode_significant_coeff_flag()

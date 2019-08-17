@@ -28,7 +28,9 @@
 #include "picture_structure.hpp"
 #include "slice_header.hpp"
 #include "slice_data.hpp"
+#include "colour_component.hpp"
 #include "mb.hpp"
+#include "mb_cache.hpp"
 
 /*===========================================================================*\
  * preprocessor #define constants and macros
@@ -88,9 +90,12 @@ protected:
         int lastQPdelta;
         int QPy;
         int QPc[2];
+        int chroma_array_type;
 
-        int intraNxN_pred_mode_cache[5 * 8];
         const uint8_t* left_blocks;
+
+        mb_cache intraNxN_pred_mode;
+        mb_cache non_zero_count[COLOUR_COMPONENTS_MAX];
     };
 
     const h264_decoder& m_decoder;
@@ -114,10 +119,10 @@ namespace h264
   The macroblock is marked as available,
   unless any of the following conditions are true,
   in which case the macroblock is marked as not available:
-  – mbAddr < 0,
-  – mbAddr > CurrMbAddr,
-  – the macroblock with address mbAddr belongs to a different slice
-    than the macroblock with address CurrMbAddr.
+   - mbAddr < 0,
+   - mbAddr > CurrMbAddr,
+   - the macroblock with address mbAddr belongs to a different slice
+  than the macroblock with address CurrMbAddr.
 */
 inline bool picture::is_mb_available(int n)
 {

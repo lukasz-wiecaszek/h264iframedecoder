@@ -62,6 +62,11 @@ constexpr static inline const char* to_string(colour_component_e e)
     return str;
 }
 
+constexpr static inline int to_int(colour_component_e e)
+{
+    return static_cast<int>(e);
+}
+
 } /* end of namespace ymn */
 
 /*===========================================================================*\
