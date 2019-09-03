@@ -51,6 +51,7 @@ using namespace ymn::h264;
 #define CAT_16x16_AC_Cr  11
 #define CAT_4x4_Cr       12
 #define CAT_8x8_Cr       13
+#define CAT_NUM          14
 
 /*===========================================================================*\
  * local type definitions
@@ -571,9 +572,11 @@ int picture_cabac::decode_intra_chroma_pred_mode()
 int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
 {
 
-    /* Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+    /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
+       Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
        significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
-    static const int base_ctx[14] = {
+    static const int base_ctx[CAT_NUM] =
+    {
         85 + 0, 85 + 4, 85 + 8, 85 + 12, 85 + 16, // ctxBlockCat < 5
         1012,                                     // ctxBlockCat == 5
         460 + 0, 460 + 4, 460 + 8,                // 5 < ctxBlockCat < 9
@@ -615,14 +618,60 @@ int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
     return m_cabac_decoder.decode_decision(base_ctx[ctxBlockCat] + ctxIdxInc);
 }
 
-int picture_cabac::decode_significant_coeff_flag()
+int picture_cabac::decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
 {
-    return -1;
+    /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
+    Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+    significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
+    static const int base_ctx[2][CAT_NUM] =
+    {
+        {
+            105+0, 105+15, 105+29, 105+44, 105+47, // ctxBlockCat < 5
+            402,                                   // ctxBlockCat == 5
+            484+0, 484+15, 484+29,                 // 5 < ctxBlockCat < 9
+            660,                                   // ctxBlockCat == 9
+            528+0, 528+15, 528+29,                 // 9 < ctxBlockCat < 13
+            718                                    // ctxBlockCat == 13
+        },
+        {
+            277+0, 277+15, 277+29, 277+44, 277+47, // ctxBlockCat < 5
+            436,                                   // ctxBlockCat == 5
+            776+0, 776+15, 776+29,                 // 5 < ctxBlockCat < 9
+            675,                                   // ctxBlockCat == 9
+            820+0, 820+15, 820+29,                 // 9 < ctxBlockCat < 13
+            733                                    // ctxBlockCat == 13
+        }
+    };
+
+    return m_cabac_decoder.decode_decision(base_ctx[m_context_variables.mb_field_decoding_flag][ctxBlockCat] + ctxIdxInc);
 }
 
-int picture_cabac::decode_last_significant_coeff_flag()
+int picture_cabac::decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
 {
-    return -1;
+   /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
+       Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+       significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
+    static const int base_ctx[2][CAT_NUM] =
+    {
+        {
+            166+0, 166+15, 166+29, 166+44, 166+47, // ctxBlockCat < 5
+            417,                                   // ctxBlockCat == 5
+            572+0, 572+15, 572+29,                 // 5 < ctxBlockCat < 9
+            690,                                   // ctxBlockCat == 9
+            616+0, 616+15, 616+29,                 // 9 < ctxBlockCat < 13
+            748                                    // ctxBlockCat == 13
+        },
+        {
+            338+0, 338+15, 338+29, 338+44, 338+47, // ctxBlockCat < 5
+            451,                                   // ctxBlockCat == 5
+            864+0, 864+15, 864+29,                 // 5 < ctxBlockCat < 9
+            699,                                   // ctxBlockCat == 9
+            908+0, 908+15, 908+29,                 // 9 < ctxBlockCat < 13
+            757                                    // ctxBlockCat == 13
+        }
+    };
+
+    return m_cabac_decoder.decode_decision(base_ctx[m_context_variables.mb_field_decoding_flag][ctxBlockCat] + ctxIdxInc);
 }
 
 int picture_cabac::decode_coeff_abs_level_minus1()

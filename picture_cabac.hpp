@@ -69,8 +69,8 @@ private:
     int decode_rem_intra8x8_pred_mode();
     int decode_intra_chroma_pred_mode();
     int decode_coded_block_flag(int ctxBlockCat, int idx);
-    int decode_significant_coeff_flag();
-    int decode_last_significant_coeff_flag();
+    int decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
+    int decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
     int decode_coeff_abs_level_minus1();
 
 private:
