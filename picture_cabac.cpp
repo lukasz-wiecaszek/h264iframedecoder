@@ -571,7 +571,6 @@ int picture_cabac::decode_intra_chroma_pred_mode()
  */
 int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
 {
-
     /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
        Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
        significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
@@ -621,8 +620,8 @@ int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
 int picture_cabac::decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
 {
     /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
-    Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
-    significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
+       Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+       significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
     static const int base_ctx[2][CAT_NUM] =
     {
         {
@@ -649,8 +648,8 @@ int picture_cabac::decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
 int picture_cabac::decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
 {
    /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
-       Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
-       significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
+      Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+      significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
     static const int base_ctx[2][CAT_NUM] =
     {
         {
@@ -674,9 +673,22 @@ int picture_cabac::decode_last_significant_coeff_flag(int ctxBlockCat, int ctxId
     return m_cabac_decoder.decode_decision(base_ctx[m_context_variables.mb_field_decoding_flag][ctxBlockCat] + ctxIdxInc);
 }
 
-int picture_cabac::decode_coeff_abs_level_minus1()
+int picture_cabac::decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc)
 {
-    return -1;
+   /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
+      Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
+      significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1 */
+    static const int base_ctx[CAT_NUM] =
+    {
+        227 + 0, 227 + 10, 227 + 20, 227+30, 227 + 39, // ctxBlockCat < 5
+        426,                                           // ctxBlockCat == 5
+        952 + 0, 952 + 10, 952 + 20,                   // 5 < ctxBlockCat < 9
+        708,                                           // ctxBlockCat == 9
+        982 + 0, 982 + 10, 982 + 20,                   // 9 < ctxBlockCat < 13
+        766                                            // ctxBlockCat == 13
+    };
+
+    return m_cabac_decoder.decode_decision(base_ctx[ctxBlockCat] + ctxIdxInc);
 }
 
 /*===========================================================================*\

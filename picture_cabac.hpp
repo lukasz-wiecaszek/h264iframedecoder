@@ -71,7 +71,7 @@ private:
     int decode_coded_block_flag(int ctxBlockCat, int idx);
     int decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
     int decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
-    int decode_coeff_abs_level_minus1();
+    int decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc);
 
 private:
     h264_cabac_decoder m_cabac_decoder;
