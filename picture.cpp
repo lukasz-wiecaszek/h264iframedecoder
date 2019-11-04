@@ -135,6 +135,11 @@ void picture::init_coxtext_variables(const h264::slice_header& sh)
         m_context_variables.chroma_array_type = 0;
 
     m_context_variables.left_blocks = nullptr; // it will be evaluated in calculate_neighbours_part2()
+
+    //m_context_variables.intraNxN_pred_mode - it will be evaluated during processing of macroblock
+    //m_context_variables.non_zero_count     - it will be evaluated during processing of macroblock
+    //m_context_variables.coeffs_ac          - it will be evaluated during processing of macroblock
+    //m_context_variables.coeffs_dc          - it will be evaluated during processing of macroblock
 }
 
 void picture::calculate_neighbours_part1()

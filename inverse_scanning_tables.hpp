@@ -53,7 +53,8 @@ namespace ymn
 namespace h264
 {
 
-inline const uint8_t zigzag_scan_4x4[16] =
+/* Please see ISO/IEC 14496-10, table 8-13 Specification of mapping of idx to cij for zig-zag and field scan */
+inline const uint8_t frame_scan_4x4[16] =
 {
     0 + 0 * 4, 1 + 0 * 4, 0 + 1 * 4, 0 + 2 * 4,
     1 + 1 * 4, 2 + 0 * 4, 3 + 0 * 4, 2 + 1 * 4,
@@ -61,7 +62,7 @@ inline const uint8_t zigzag_scan_4x4[16] =
     3 + 1 * 4, 3 + 2 * 4, 2 + 3 * 4, 3 + 3 * 4,
 };
 
-
+/* Please see ISO/IEC 14496-10, table 8-13 Specification of mapping of idx to cij for zig-zag and field scan */
 inline const uint8_t field_scan_4x4[16] =
 {
     0 + 0 * 4, 0 + 1 * 4, 1 + 0 * 4, 0 + 2 * 4,
@@ -70,7 +71,8 @@ inline const uint8_t field_scan_4x4[16] =
     3 + 0 * 4, 3 + 1 * 4, 3 + 2 * 4, 3 + 3 * 4,
 };
 
-inline const uint8_t zigzag_scan_8x8[64] =
+/* Please see ISO/IEC 14496-10, table 8-14 Specification of mapping of idx to cij for 8x8 zig-zag and 8x8 field scan */
+inline const uint8_t frame_scan_8x8[64] =
 {
     0 + 0 * 8, 1 + 0 * 8, 0 + 1 * 8, 0 + 2 * 8, 1 + 1 * 8, 2 + 0 * 8, 3 + 0 * 8, 2 + 1 * 8,
     1 + 2 * 8, 0 + 3 * 8, 0 + 4 * 8, 1 + 3 * 8, 2 + 2 * 8, 3 + 1 * 8, 4 + 0 * 8, 5 + 0 * 8,
@@ -82,6 +84,7 @@ inline const uint8_t zigzag_scan_8x8[64] =
     5 + 6 * 8, 4 + 7 * 8, 5 + 7 * 8, 6 + 6 * 8, 7 + 5 * 8, 7 + 6 * 8, 6 + 7 * 8, 7 + 7 * 8,
 };
 
+/* Please see ISO/IEC 14496-10, table 8-14 Specification of mapping of idx to cij for 8x8 zig-zag and 8x8 field scan */
 inline const uint8_t field_scan_8x8[64] =
 {
     0 + 0 * 8, 0 + 1 * 8, 0 + 2 * 8, 1 + 0 * 8, 1 + 1 * 8, 0 + 3 * 8, 0 + 4 * 8, 1 + 2 * 8,
@@ -92,6 +95,11 @@ inline const uint8_t field_scan_8x8[64] =
     4 + 4 * 8, 4 + 5 * 8, 4 + 6 * 8, 4 + 7 * 8, 5 + 3 * 8, 6 + 1 * 8, 6 + 2 * 8, 5 + 4 * 8,
     5 + 5 * 8, 5 + 6 * 8, 5 + 7 * 8, 6 + 3 * 8, 7 + 0 * 8, 7 + 1 * 8, 6 + 4 * 8, 6 + 5 * 8,
     6 + 6 * 8, 6 + 7 * 8, 7 + 2 * 8, 7 + 3 * 8, 7 + 4 * 8, 7 + 5 * 8, 7 + 6 * 8, 7 + 7 * 8,
+};
+
+inline const uint8_t scan_table_chroma_dc[4] =
+{
+    0, 1, 2, 3
 };
 
 } /* end of namespace h264 */

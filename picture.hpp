@@ -25,6 +25,7 @@
 /*===========================================================================*\
  * project header files
 \*===========================================================================*/
+#include "h264_definitions.hpp"
 #include "picture_structure.hpp"
 #include "slice_header.hpp"
 #include "slice_data.hpp"
@@ -96,6 +97,9 @@ protected:
 
         mb_cache intraNxN_pred_mode;
         mb_cache non_zero_count[COLOUR_COMPONENTS_MAX];
+
+        dctcoeff coeffs_dc[COLOUR_COMPONENTS_MAX][16];
+        dctcoeff coeffs_ac[COLOUR_COMPONENTS_MAX][16 * 16];
     };
 
     const h264_decoder& m_decoder;

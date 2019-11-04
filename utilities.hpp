@@ -39,6 +39,8 @@
 
 #define TABLE_ELEMENTS(x) (sizeof(x) / sizeof(x[0]))
 
+#define DEREFERENCE(TYPE, PTR) (*(reinterpret_cast<TYPE*>(PTR)))
+
 #define CHK_EXPR(expr, ostream) chk_expr(#expr, expr, ostream)
 
 #define CHK_MIN(item, min, ostream) \

@@ -29,6 +29,7 @@
  * project header files
 \*===========================================================================*/
 #include "picture.hpp"
+#include "h264_definitions.hpp"
 #include "h264_cabac_decoder.hpp"
 
 /*===========================================================================*\
@@ -44,6 +45,25 @@ namespace ymn
 namespace h264
 {
 
+enum ctx_block_cat_e
+{
+    CAT_16x16_DC_Y    = 0,
+    CAT_16x16_AC_Y    = 1,
+    CAT_4x4_Y         = 2,
+    CAT_CHROMA_DC     = 3,
+    CAT_CHROMA_AC     = 4,
+    CAT_8x8_Y         = 5,
+    CAT_16x16_DC_Cb   = 6,
+    CAT_16x16_AC_Cb   = 7,
+    CAT_4x4_Cb        = 8,
+    CAT_8x8_Cb        = 9,
+    CAT_16x16_DC_Cr   = 10,
+    CAT_16x16_AC_Cr   = 11,
+    CAT_4x4_Cr        = 12,
+    CAT_8x8_Cr        = 13,
+    CAT_NUM           = 14
+};
+
 class picture_cabac : public picture
 {
 public:
@@ -53,6 +73,11 @@ public:
     void decode(const h264::slice_header& sh, const h264::slice_data& sd) override;
 
 private:
+    void intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pred_flag);
+    int get_predicted_intra_mode(int idx);
+    int get_intra4x4_pred_mode(int pred_mode);
+    int get_intra8x8_pred_mode(int pred_mode);
+
     void non_zero_count_cache_init(uint32_t mb_type);
     void non_zero_count_save();
 
@@ -72,6 +97,31 @@ private:
     int decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
     int decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
     int decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc);
+
+    void decode_residual_block(dctcoeff& block,
+                               const enum ctx_block_cat_e cat,
+                               const int idx,
+                               const uint8_t* scantable,
+                               const int max_coeff);
+
+    void decode_residual_dc(dctcoeff& block,
+                            const enum ctx_block_cat_e cat,
+                            const int idx,
+                            const uint8_t* scantable,
+                            const int max_coeff);
+
+    void decode_residual_ac(dctcoeff& block,
+                            const enum ctx_block_cat_e cat,
+                            const int idx,
+                            const uint8_t* scantable,
+                            const int max_coeff);
+
+    void decode_residual(const uint8_t* scan4x4,
+                         const uint8_t* scan8x8,
+                         colour_component_e cc);
+
+    void decode_residual();
+    void decode_mb(const h264::slice_header& sh);
 
 private:
     h264_cabac_decoder m_cabac_decoder;

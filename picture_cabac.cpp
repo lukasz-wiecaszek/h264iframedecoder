@@ -21,13 +21,20 @@
 /*===========================================================================*\
  * system header files
 \*===========================================================================*/
+#include <algorithm>
 
 /*===========================================================================*\
  * project header files
 \*===========================================================================*/
 #include "picture_cabac.hpp"
+#include "utilities.hpp"
 #include "colour_component.hpp"
+#include "h264_definitions.hpp"
 #include "h264_decoder.hpp"
+#include "mb_info_i.hpp"
+#include "mb_intra_prediction_modes.hpp"
+#include "inverse_scanning_4x4.hpp"
+#include "inverse_scanning_tables.hpp"
 
 /*===========================================================================*\
  * 'using namespace' section
@@ -37,21 +44,6 @@ using namespace ymn::h264;
 /*===========================================================================*\
  * preprocessor #define constants and macros
 \*===========================================================================*/
-#define CAT_16x16_DC_Y    0
-#define CAT_16x16_AC_Y    1
-#define CAT_4x4_Y         2
-#define CAT_CHROMA_DC     3
-#define CAT_CHROMA_AC     4
-#define CAT_8x8_Y         5
-#define CAT_16x16_DC_Cb   6
-#define CAT_16x16_AC_Cb   7
-#define CAT_4x4_Cb        8
-#define CAT_8x8_Cb        9
-#define CAT_16x16_DC_Cr  10
-#define CAT_16x16_AC_Cr  11
-#define CAT_4x4_Cr       12
-#define CAT_8x8_Cr       13
-#define CAT_NUM          14
 
 /*===========================================================================*\
  * local type definitions
@@ -102,11 +94,17 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
 
     for (mb = curr_mb(); (mb = curr_mb()) != nullptr; advance_mb_pos()) {
         if ((sh.slice_type != h264::slice_type_e::I) && (sh.slice_type != h264::slice_type_e::SI)) {
-            bool is_skipped = true;
-            /* check for skipped macroblocks */
+            bool is_skipped = true; /* TODO: check for skipped macroblocks */
             if (is_skipped)
                 continue;
         }
+
+        if ((m_context_variables.mb_aff_frame) && ((m_context_variables.mb_y & 1) == 0))
+            m_context_variables.mb_field_decoding_flag = decode_mb_field_decoding_flag();
+
+        calculate_neighbours_part2();
+
+        decode_mb(sh); /* macroblock_layer */
 
         std::cout << mb->to_string();
     }
@@ -119,6 +117,103 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
 /*===========================================================================*\
  * private function definitions
 \*===========================================================================*/
+void picture_cabac::intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pred_flag)
+{
+    const mb* curr_mb = m_context_variables.curr_mb;
+    const uint8_t* left_blocks = m_context_variables.left_blocks;
+    mb_cache& ipm_cache = m_context_variables.intraNxN_pred_mode;
+
+    if (curr_mb->top && MB_IS_INTRA_NxN(curr_mb->top->type)) {
+        const mb* top = curr_mb->top;
+
+        if (MB_IS_INTRA_4x4(top->type))
+        {
+            ipm_cache[0 * 8 + 4] = top->intra_luma_pred_mode.m4x4[3 * 4 + 0];
+            ipm_cache[0 * 8 + 5] = top->intra_luma_pred_mode.m4x4[3 * 4 + 1];
+            ipm_cache[0 * 8 + 6] = top->intra_luma_pred_mode.m4x4[3 * 4 + 2];
+            ipm_cache[0 * 8 + 7] = top->intra_luma_pred_mode.m4x4[3 * 4 + 3];
+        }
+        else
+        {
+            ipm_cache[0 * 8 + 4] = top->intra_luma_pred_mode.m8x8[2];
+            ipm_cache[0 * 8 + 5] = top->intra_luma_pred_mode.m8x8[2];
+            ipm_cache[0 * 8 + 6] = top->intra_luma_pred_mode.m8x8[3];
+            ipm_cache[0 * 8 + 7] = top->intra_luma_pred_mode.m8x8[3];
+        }
+    }
+    else {
+        int pred = MB_INTRA_PRED_LUMA_NxN_DC;
+
+        if (curr_mb->top == nullptr || (MB_IS_INTER(curr_mb->top->type) && constrained_intra_pred_flag))
+            pred = -1;
+
+        ipm_cache[0 * 8 + 4] = pred;
+        ipm_cache[0 * 8 + 5] = pred;
+        ipm_cache[0 * 8 + 6] = pred;
+        ipm_cache[0 * 8 + 7] = pred;
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        if (curr_mb->left_pair[i] && MB_IS_INTRA_NxN(curr_mb->left_pair[i]->type)) {
+            const mb* left = curr_mb->left_pair[i];
+
+            if (MB_IS_INTRA_4x4(left->type)) {
+                ipm_cache[3 + 8 * 1 + 2 * 8 * i] =
+                    left->intra_luma_pred_mode.m4x4[3 + left_blocks[0 + 2 * i] * 4];
+
+                ipm_cache[3 + 8 * 2 + 2 * 8 * i] =
+                    left->intra_luma_pred_mode.m4x4[3 + left_blocks[1 + 2 * i] * 4];
+            }
+            else {
+                ipm_cache[3 + 8 * 1 + 2 * 8 * i] =
+                    left->intra_luma_pred_mode.m8x8[left_blocks[0 + 2 * i] | 1];
+
+                ipm_cache[3 + 8 * 2 + 2 * 8 * i] =
+                    left->intra_luma_pred_mode.m8x8[left_blocks[1 + 2 * i] | 1];
+            }
+        }
+        else {
+            int pred = MB_INTRA_PRED_LUMA_NxN_DC;
+
+            if (curr_mb->left_pair[i] == nullptr|| (MB_IS_INTER(curr_mb->left_pair[i]->type) && constrained_intra_pred_flag))
+                pred = -1;
+
+            ipm_cache[3 + 8 * 1 + 2 * 8 * i] = pred;
+            ipm_cache[3 + 8 * 2 + 2 * 8 * i] = pred;
+        }
+    }
+}
+
+int picture_cabac::get_predicted_intra_mode(int idx)
+{
+    const int cache_idx = mb_cache_idx[idx];
+    const int left = m_context_variables.intraNxN_pred_mode[cache_idx - 1];
+    const int top = m_context_variables.intraNxN_pred_mode[cache_idx - 8];
+    const int min = std::min(left, top);
+
+    return min < 0 ? MB_INTRA_PRED_LUMA_NxN_DC : min;
+}
+
+int picture_cabac::get_intra4x4_pred_mode(int pred_mode)
+{
+    if (decode_prev_intra4x4_pred_mode_flag())
+        return pred_mode;
+
+    int mode = decode_rem_intra4x4_pred_mode();
+
+    return mode + (mode >= pred_mode);
+}
+
+int picture_cabac::get_intra8x8_pred_mode(int pred_mode)
+{
+    if (decode_prev_intra8x8_pred_mode_flag())
+        return pred_mode;
+
+    int mode = decode_rem_intra8x8_pred_mode();
+
+    return mode + (mode >= pred_mode);
+}
+
 void picture_cabac::non_zero_count_cache_init(uint32_t mb_type)
 {
     const mb* curr_mb = m_context_variables.curr_mb;
@@ -151,13 +246,9 @@ void picture_cabac::non_zero_count_cache_init(uint32_t mb_type)
         // 0x40 (64) means "value not available"
         uint32_t top_mb_not_available = m_decoder.m_active_pps->entropy_coding_mode_flag && !MB_IS_INTRA(mb_type) ? 0 : 0x40404040;
 
-#define DEREFERENCE(TYPE, PTR) (*(reinterpret_cast<TYPE*>(PTR)))
-
         DEREFERENCE(uint32_t, &nzc_cache_y [0 * 8 + 4]) = top_mb_not_available;
         DEREFERENCE(uint32_t, &nzc_cache_cb[0 * 8 + 4]) = top_mb_not_available;
         DEREFERENCE(uint32_t, &nzc_cache_cr[0 * 8 + 4]) = top_mb_not_available;
-
-#undef DEREFERENCE
     }
 
     for (int i = 0; i < 2; ++i) {
@@ -305,7 +396,7 @@ int picture_cabac::decode_mb_type_i_slice()
     ctxIdxInc += ((curr_mb->top != nullptr) && ((curr_mb->top->type & MB_TYPE_INTRA_NxN) == 0));
 
     if (m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc) == 0)
-        return 0; /* SI 4x4 */
+        return 0; /* I 4x4 */
 
     if (m_cabac_decoder.decode_terminate() == 1)
         return 25; /* PCM */
@@ -588,11 +679,12 @@ int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
     int ctxIdxInc = 0;
 
     if (idx < 16 * COLOUR_COMPONENTS_MAX) { /* ac */
-        idx /= COLOUR_COMPONENTS_MAX;
+        idx /= 16;
         mb_cache& nzc_cache = m_context_variables.non_zero_count[idx];
+        const int cache_idx = mb_cache_idx[idx];
 
-        nza = nzc_cache[mb_cache_idx[idx] - 1];
-        nzb = nzc_cache[mb_cache_idx[idx] - 8];
+        nza = nzc_cache[cache_idx - 1];
+        nzb = nzc_cache[cache_idx - 8];
     }
     else { /* dc */
         mb* curr_mb = m_context_variables.curr_mb;
@@ -689,6 +781,225 @@ int picture_cabac::decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc)
     };
 
     return m_cabac_decoder.decode_decision(base_ctx[ctxBlockCat] + ctxIdxInc);
+}
+
+void picture_cabac::decode_residual_block(dctcoeff& block,
+                                          const enum ctx_block_cat_e cat,
+                                          const int idx,
+                                          const uint8_t* scantable,
+                                          const int max_coeff)
+{
+}
+
+void picture_cabac::decode_residual_dc(dctcoeff& block,
+                                       const enum ctx_block_cat_e cat,
+                                       const int idx,
+                                       const uint8_t* scantable,
+                                       const int max_coeff)
+{
+}
+
+void picture_cabac::decode_residual_ac(dctcoeff& block,
+                                       const enum ctx_block_cat_e cat,
+                                       const int idx,
+                                       const uint8_t* scantable,
+                                       const int max_coeff)
+{
+}
+
+void picture_cabac::decode_residual(const uint8_t* scan4x4,
+                                    const uint8_t* scan8x8,
+                                    colour_component_e cc)
+{
+    static const int ctx_cat[4][COLOUR_COMPONENTS_MAX] =
+    {
+        {CAT_16x16_DC_Y, CAT_16x16_DC_Cb, CAT_16x16_DC_Cr},
+        {CAT_16x16_AC_Y, CAT_16x16_AC_Cb, CAT_16x16_AC_Cr},
+        {CAT_4x4_Y,      CAT_4x4_Cb,      CAT_4x4_Cr},
+        {CAT_8x8_Y,      CAT_8x8_Cb,      CAT_8x8_Cr}
+    };
+}
+
+void picture_cabac::decode_residual()
+{
+    mb* curr_mb = m_context_variables.curr_mb;
+    uint32_t mb_type = curr_mb->type;
+    int cbp_chroma = curr_mb->cbp_chroma;
+
+    const uint8_t* const scan4x4 = MB_IS_INTERLACED(mb_type) ?
+        field_scan_4x4 : frame_scan_4x4;
+    const uint8_t* const scan8x8 = MB_IS_INTERLACED(mb_type) ?
+        field_scan_8x8 : frame_scan_8x8;
+
+    for (int i = 0; i < COLOUR_COMPONENTS_MAX; ++i)
+        memset(&m_context_variables.coeffs_ac[i], 0, sizeof(m_context_variables.coeffs_ac[i]));
+
+    decode_residual(scan4x4, scan8x8, colour_component_e::Y);
+
+    if (m_context_variables.chroma_array_type == 0) { // monochrome
+        /* do nothing */
+    }
+    else
+    if (m_context_variables.chroma_array_type == 1) { // 4:2:0
+        if (cbp_chroma & 0x03)
+        {
+        }
+        if (cbp_chroma & 0x20)
+        {
+        }
+        else
+        {
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cb)], mb_cache_idx[0], 0);
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cr)], mb_cache_idx[0], 0);
+        }
+    }
+    else
+    if (m_context_variables.chroma_array_type == 2) { // 4:2:2
+        if (cbp_chroma & 0x03)
+        {
+        }
+        if (cbp_chroma & 0x20)
+        {
+        }
+        else
+        {
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cb)], mb_cache_idx[0], 0);
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cr)], mb_cache_idx[0], 0);
+        }
+    }
+    else { // 4:4:4
+        decode_residual(scan4x4, scan8x8, colour_component_e::Cb);
+        decode_residual(scan4x4, scan8x8, colour_component_e::Cr);
+    }
+}
+
+void picture_cabac::decode_mb(const h264::slice_header& sh)
+{
+    uint32_t mb_type;
+    int cbp_luma;
+    int cbp_chroma;
+    mb* curr_mb = m_context_variables.curr_mb;
+    int decode_chroma = m_context_variables.chroma_array_type == 1 ||
+                        m_context_variables.chroma_array_type == 2;
+
+    if (sh.slice_type == h264::slice_type_e::B) {
+        /* not implemented */
+        mb_type = 0;
+        cbp_luma = 0;
+        cbp_chroma = 0;
+    }
+    else
+    if (sh.slice_type == h264::slice_type_e::P ||
+        sh.slice_type == h264::slice_type_e::SP) {
+        /* not implemented */
+        mb_type = 0;
+        cbp_luma = 0;
+        cbp_chroma = 0;
+    }
+    else {
+        int i_mb_type = 0;
+
+        if (sh.slice_type == h264::slice_type_e::I)
+            i_mb_type = decode_mb_type_i_slice();
+
+        if (sh.slice_type == h264::slice_type_e::SI) {
+            i_mb_type = decode_mb_type_si_slice();
+            if (i_mb_type)
+                i_mb_type--;
+        }
+
+        mb_type = mb_info_i[i_mb_type].type;
+        cbp_luma = mb_info_i[i_mb_type].cbp_luma;
+        cbp_chroma = mb_info_i[i_mb_type].cbp_chroma;
+        curr_mb->intra_luma_pred_mode.m16x16 = mb_info_i[i_mb_type].pred_mode;
+    }
+
+    if (m_context_variables.mb_field_decoding_flag)
+        mb_type |= MB_TYPE_INTERLACED;
+
+    if (sh.slice_type == h264::slice_type_e::SI ||
+        sh.slice_type == h264::slice_type_e::SP)
+        mb_type |= MB_TYPE_SWITCHING;
+
+    curr_mb->intra_chroma_pred_mode = 0;
+
+    if (MB_IS_INTRA_PCM(mb_type))
+        return;  /* not implemented */
+
+    if (MB_IS_INTRA(mb_type)) {
+        if (MB_IS_INTRA_NxN(mb_type)) {
+            int pred;
+            int mode;
+
+            intraNxN_pred_mode_cache_init(m_decoder.m_active_pps->constrained_intra_pred_flag);
+
+            if (m_decoder.m_active_pps->transform_8x8_mode_flag && decode_transform_size_8x8_flag()) {
+                mb_type &= ~MB_TYPE_INTRA_4x4;
+                mb_type |=  MB_TYPE_8x8DCT;
+                for (int i = 0; i < 4; ++i) {
+                    pred = get_predicted_intra_mode(i * 4);
+                    mode = get_intra8x8_pred_mode(pred);
+                    curr_mb->intra_luma_pred_mode.m8x8[i] = mode;
+                    mb_cache_fill_rectangle_2x2(m_context_variables.intraNxN_pred_mode, mb_cache_idx[i * 4], mode);
+                }
+            }
+            else {
+                mb_type &= ~MB_TYPE_INTRA_8x8;
+                for (int i = 0; i < 16; ++i) {
+                    pred = get_predicted_intra_mode(i);
+                    mode = get_intra4x4_pred_mode(pred);
+                    curr_mb->intra_luma_pred_mode.m4x4[inverse_scanning_4x4[i]] = mode;
+                    m_context_variables.intraNxN_pred_mode[mb_cache_idx[i]] = mode;
+                }
+            }
+        }
+        if (decode_chroma)
+            curr_mb->intra_chroma_pred_mode = decode_intra_chroma_pred_mode();
+    }
+
+    if (!MB_IS_INTRA_16x16(mb_type)) {
+        cbp_luma = decode_cbp_luma();
+        if (decode_chroma)
+            cbp_chroma = decode_cbp_chroma();
+
+        if (cbp_luma && m_decoder.m_active_pps->transform_8x8_mode_flag && !MB_IS_INTRA_NxN(mb_type))
+            mb_type |= MB_TYPE_8x8DCT * decode_transform_size_8x8_flag();
+    }
+
+    curr_mb->type = mb_type;
+    curr_mb->cbp_luma = cbp_luma;
+    curr_mb->cbp_chroma = cbp_chroma;
+
+    if (cbp_luma || cbp_chroma || MB_IS_INTRA_16x16(mb_type)) {
+        const int max_qp = 51 + 6 * m_decoder.m_active_sps->bit_depth_luma_minus8;
+        int qp_delta;
+
+        non_zero_count_cache_init(mb_type);
+
+        /* decode mb_qp_delta */
+        m_context_variables.lastQPdelta = qp_delta = decode_mb_qp_delta();
+        m_context_variables.QPy += qp_delta;
+
+        if (m_context_variables.QPy < 0)
+          m_context_variables.QPy += max_qp + 1;
+
+        if (m_context_variables.QPy > max_qp)
+          m_context_variables.QPy -= max_qp + 1;
+
+        m_context_variables.QPc[0] = m_decoder.m_chroma_qp_table[0][m_context_variables.QPy];
+        m_context_variables.QPc[1] = m_decoder.m_chroma_qp_table[1][m_context_variables.QPy];
+
+        decode_residual();
+    }
+    else {
+        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Y)],  mb_cache_idx[0], 0);
+        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cb)], mb_cache_idx[0], 0);
+        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cr)], mb_cache_idx[0], 0);
+        m_context_variables.lastQPdelta = 0;
+    }
+
+    curr_mb->luma_qp = m_context_variables.QPy;
+    non_zero_count_save();
 }
 
 /*===========================================================================*\

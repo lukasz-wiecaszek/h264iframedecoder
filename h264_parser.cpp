@@ -68,7 +68,7 @@ static inline void parse_scaling_list(istream_be& s, uint8_t (&coeffs)[N], const
     uint8_t last = 8, next = 8;
 
     const uint8_t* const scan = N == 16 ?
-      h264::zigzag_scan_4x4 : h264::zigzag_scan_8x8;
+      h264::frame_scan_4x4 : h264::frame_scan_8x8;
 
     for (std::size_t i = 0; i < N; ++i) {
         if (next) {

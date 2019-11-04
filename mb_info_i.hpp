@@ -44,7 +44,7 @@ static const struct {
     int cbp_luma;
     int cbp_chroma;
 } mb_info_i[26] = {
-    {MB_TYPE_INTRA_NxN,  -1,  -1 },
+    {MB_TYPE_INTRA_NxN,  -1,  -1, -1},
     {MB_TYPE_INTRA_16x16, MB_INTRA_PRED_LUMA_16x16_VERTICAL,   0x0, 0},
     {MB_TYPE_INTRA_16x16, MB_INTRA_PRED_LUMA_16x16_HORIZONTAL, 0x0, 0},
     {MB_TYPE_INTRA_16x16, MB_INTRA_PRED_LUMA_16x16_DC,         0x0, 0},
@@ -69,7 +69,7 @@ static const struct {
     {MB_TYPE_INTRA_16x16, MB_INTRA_PRED_LUMA_16x16_HORIZONTAL, 0xf, 2},
     {MB_TYPE_INTRA_16x16, MB_INTRA_PRED_LUMA_16x16_DC,         0xf, 2},
     {MB_TYPE_INTRA_16x16, MB_INTRA_PRED_LUMA_16x16_PLANE,      0xf, 2},
-    {MB_TYPE_INTRA_PCM,  -1, -1 },
+    {MB_TYPE_INTRA_PCM,  -1, -1, -1},
 };
 
 } /* end of namespace ymn */
