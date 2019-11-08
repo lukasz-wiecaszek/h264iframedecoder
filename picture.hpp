@@ -95,11 +95,11 @@ protected:
 
         const uint8_t* left_blocks;
 
-        mb_cache intraNxN_pred_mode;
-        mb_cache non_zero_count[COLOUR_COMPONENTS_MAX];
+        mb_cache intraNxN_pred_mode_cache;
+        mb_cache non_zero_count_cache[CC_MAX];
 
-        dctcoeff coeffs_dc[COLOUR_COMPONENTS_MAX][16];
-        dctcoeff coeffs_ac[COLOUR_COMPONENTS_MAX][16 * 16];
+        dctcoeff coeffs_dc[CC_MAX][16];
+        dctcoeff coeffs_ac[CC_MAX][16 * 16];
     };
 
     const h264_decoder& m_decoder;

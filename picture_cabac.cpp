@@ -121,7 +121,7 @@ void picture_cabac::intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pre
 {
     const mb* curr_mb = m_context_variables.curr_mb;
     const uint8_t* left_blocks = m_context_variables.left_blocks;
-    mb_cache& ipm_cache = m_context_variables.intraNxN_pred_mode;
+    mb_cache& ipm_cache = m_context_variables.intraNxN_pred_mode_cache;
 
     if (curr_mb->top && MB_IS_INTRA_NxN(curr_mb->top->type)) {
         const mb* top = curr_mb->top;
@@ -187,8 +187,8 @@ void picture_cabac::intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pre
 int picture_cabac::get_predicted_intra_mode(int idx)
 {
     const int cache_idx = mb_cache_idx[idx];
-    const int left = m_context_variables.intraNxN_pred_mode[cache_idx - 1];
-    const int top = m_context_variables.intraNxN_pred_mode[cache_idx - 8];
+    const int left = m_context_variables.intraNxN_pred_mode_cache[cache_idx - 1];
+    const int top = m_context_variables.intraNxN_pred_mode_cache[cache_idx - 8];
     const int min = std::min(left, top);
 
     return min < 0 ? MB_INTRA_PRED_LUMA_NxN_DC : min;
@@ -219,9 +219,9 @@ void picture_cabac::non_zero_count_cache_init(uint32_t mb_type)
     const mb* curr_mb = m_context_variables.curr_mb;
     const uint8_t* left_blocks = m_context_variables.left_blocks;
 
-    mb_cache& nzc_cache_y  = m_context_variables.non_zero_count[to_int(colour_component_e::Y)];
-    mb_cache& nzc_cache_cb = m_context_variables.non_zero_count[to_int(colour_component_e::Cb)];
-    mb_cache& nzc_cache_cr = m_context_variables.non_zero_count[to_int(colour_component_e::Cr)];
+    mb_cache& nzc_cache_y  = m_context_variables.non_zero_count_cache[CC_Y];
+    mb_cache& nzc_cache_cb = m_context_variables.non_zero_count_cache[CC_Cb];
+    mb_cache& nzc_cache_cr = m_context_variables.non_zero_count_cache[CC_Cr];
 
     if (curr_mb->top) {
         const uint8_t* nzc = curr_mb->top->non_zero_count;
@@ -301,9 +301,9 @@ void picture_cabac::non_zero_count_save()
     mb* curr_mb = m_context_variables.curr_mb;
     uint8_t* nzc = curr_mb->non_zero_count;
 
-    const mb_cache& nzc_cache_y  = m_context_variables.non_zero_count[to_int(colour_component_e::Y)];
-    const mb_cache& nzc_cache_cb = m_context_variables.non_zero_count[to_int(colour_component_e::Cb)];
-    const mb_cache& nzc_cache_cr = m_context_variables.non_zero_count[to_int(colour_component_e::Cr)];
+    const mb_cache& nzc_cache_y  = m_context_variables.non_zero_count_cache[CC_Y];
+    const mb_cache& nzc_cache_cb = m_context_variables.non_zero_count_cache[CC_Cb];
+    const mb_cache& nzc_cache_cr = m_context_variables.non_zero_count_cache[CC_Cr];
 
     nzc[MB_NZC_DC_BLOCK_IDX_Y] = nzc_cache_y[0];
 
@@ -660,7 +660,7 @@ int picture_cabac::decode_intra_chroma_pred_mode()
  * maxBinIdxCtx: 0
  * ctxIdxOffset: 1012..1023
  */
-int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
+int picture_cabac::decode_coded_block_flag(const enum ctx_block_cat_e ctxBlockCat, int idx)
 {
     /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
        Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
@@ -678,10 +678,9 @@ int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
     int nza, nzb;
     int ctxIdxInc = 0;
 
-    if (idx < 16 * COLOUR_COMPONENTS_MAX) { /* ac */
-        idx /= 16;
-        mb_cache& nzc_cache = m_context_variables.non_zero_count[idx];
-        const int cache_idx = mb_cache_idx[idx];
+    if (idx < 16 * CC_MAX) { /* ac */
+        mb_cache& nzc_cache = m_context_variables.non_zero_count_cache[idx / 16];
+        const int cache_idx = mb_cache_idx[idx % 16];
 
         nza = nzc_cache[cache_idx - 1];
         nzb = nzc_cache[cache_idx - 8];
@@ -709,7 +708,7 @@ int picture_cabac::decode_coded_block_flag(int ctxBlockCat, int idx)
     return m_cabac_decoder.decode_decision(base_ctx[ctxBlockCat] + ctxIdxInc);
 }
 
-int picture_cabac::decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
+int picture_cabac::decode_significant_coeff_flag(const enum ctx_block_cat_e ctxBlockCat, int ctxIdxInc)
 {
     /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
        Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
@@ -737,7 +736,7 @@ int picture_cabac::decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
     return m_cabac_decoder.decode_decision(base_ctx[m_context_variables.mb_field_decoding_flag][ctxBlockCat] + ctxIdxInc);
 }
 
-int picture_cabac::decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc)
+int picture_cabac::decode_last_significant_coeff_flag(const enum ctx_block_cat_e ctxBlockCat, int ctxIdxInc)
 {
    /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
       Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
@@ -765,7 +764,7 @@ int picture_cabac::decode_last_significant_coeff_flag(int ctxBlockCat, int ctxId
     return m_cabac_decoder.decode_decision(base_ctx[m_context_variables.mb_field_decoding_flag][ctxBlockCat] + ctxIdxInc);
 }
 
-int picture_cabac::decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc)
+int picture_cabac::decode_coeff_abs_level_minus1(const enum ctx_block_cat_e ctxBlockCat, int ctxIdxInc)
 {
    /* Table 9-34 – Syntax elements and associated types of binarization, maxBinIdxCtx, and ctxIdxOffset
       Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag,
@@ -783,40 +782,60 @@ int picture_cabac::decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc)
     return m_cabac_decoder.decode_decision(base_ctx[ctxBlockCat] + ctxIdxInc);
 }
 
-void picture_cabac::decode_residual_block(dctcoeff& block,
-                                          const enum ctx_block_cat_e cat,
+void picture_cabac::decode_residual_block(dctcoeff* block,
+                                          const enum ctx_block_cat_e ctxBlockCat,
                                           const int idx,
                                           const uint8_t* scantable,
                                           const int max_coeff)
 {
 }
 
-void picture_cabac::decode_residual_dc(dctcoeff& block,
-                                       const enum ctx_block_cat_e cat,
+void picture_cabac::decode_residual_dc(dctcoeff* block,
+                                       const enum ctx_block_cat_e ctxBlockCat,
                                        const int idx,
                                        const uint8_t* scantable,
                                        const int max_coeff)
 {
+    if (decode_coded_block_flag(ctxBlockCat, idx))
+        decode_residual_block(block, ctxBlockCat, idx, scantable, max_coeff);
+    else {
+        mb_cache& nzc_cache = m_context_variables.non_zero_count_cache[idx - 16 * CC_MAX];
+        nzc_cache[0] = 0;
+    }
 }
 
-void picture_cabac::decode_residual_ac(dctcoeff& block,
-                                       const enum ctx_block_cat_e cat,
+void picture_cabac::decode_residual_ac(dctcoeff* block,
+                                       const enum ctx_block_cat_e ctxBlockCat,
                                        const int idx,
                                        const uint8_t* scantable,
                                        const int max_coeff)
 {
+    if (ctxBlockCat != CAT_8x8_Y || m_context_variables.chroma_array_type == 3) {
+        if (decode_coded_block_flag(ctxBlockCat, idx))
+            decode_residual_block(block, ctxBlockCat, idx, scantable, max_coeff);
+        else {
+            mb_cache& nzc_cache = m_context_variables.non_zero_count_cache[idx / 16];
+            const int cache_idx = mb_cache_idx[idx % 16];
+            if (max_coeff == 64)
+                mb_cache_fill_rectangle_2x2(nzc_cache, cache_idx, 0);
+            else
+                nzc_cache[cache_idx] = 0;
+        }
+    }
+    else {
+        decode_residual_block(block, ctxBlockCat, idx, scantable, max_coeff);
+    }
 }
 
 void picture_cabac::decode_residual(const uint8_t* scan4x4,
                                     const uint8_t* scan8x8,
                                     colour_component_e cc)
 {
-    static const int ctx_cat[4][COLOUR_COMPONENTS_MAX] =
+    static const int ctx_cat[CC_MAX][4] =
     {
-        {CAT_16x16_DC_Y, CAT_16x16_DC_Cb, CAT_16x16_DC_Cr},
-        {CAT_16x16_AC_Y, CAT_16x16_AC_Cb, CAT_16x16_AC_Cr},
-        {CAT_4x4_Y,      CAT_4x4_Cb,      CAT_4x4_Cr},
-        {CAT_8x8_Y,      CAT_8x8_Cb,      CAT_8x8_Cr}
+        {CAT_16x16_DC_Y,  CAT_16x16_AC_Y,  CAT_4x4_Y,  CAT_8x8_Y},  // Y
+        {CAT_16x16_DC_Cb, CAT_16x16_AC_Cb, CAT_4x4_Cb, CAT_8x8_Cb}, // Cb
+        {CAT_16x16_DC_Cr, CAT_16x16_AC_Cr, CAT_4x4_Cr, CAT_8x8_Cr}  // Cr
     };
 }
 
@@ -831,43 +850,48 @@ void picture_cabac::decode_residual()
     const uint8_t* const scan8x8 = MB_IS_INTERLACED(mb_type) ?
         field_scan_8x8 : frame_scan_8x8;
 
-    for (int i = 0; i < COLOUR_COMPONENTS_MAX; ++i)
+    for (int i = 0; i < CC_MAX; ++i)
         memset(&m_context_variables.coeffs_ac[i], 0, sizeof(m_context_variables.coeffs_ac[i]));
 
     decode_residual(scan4x4, scan8x8, colour_component_e::Y);
 
-    if (m_context_variables.chroma_array_type == 0) { // monochrome
+    if (m_context_variables.chroma_array_type == 0) { /* monochrome */
         /* do nothing */
     }
     else
-    if (m_context_variables.chroma_array_type == 1) { // 4:2:0
-        if (cbp_chroma & 0x03)
-        {
+    if (m_context_variables.chroma_array_type == 1) { /* 4:2:0 */
+        if (cbp_chroma & 3) { /* chroma DC residual present */
+            memset(&m_context_variables.coeffs_dc[CC_Cb], 0, 4 * sizeof(dctcoeff));
+            memset(&m_context_variables.coeffs_dc[CC_Cr], 0, 4 * sizeof(dctcoeff));
+
+            decode_residual_dc(m_context_variables.coeffs_dc[CC_Cb],
+                CAT_CHROMA_DC, MB_NZC_DC_BLOCK_IDX_Cb, scan_table_chroma_dc, 4);
+            decode_residual_dc(m_context_variables.coeffs_dc[CC_Cr],
+                CAT_CHROMA_DC, MB_NZC_DC_BLOCK_IDX_Cr, scan_table_chroma_dc, 4);
+
+
         }
-        if (cbp_chroma & 0x20)
-        {
+        if (cbp_chroma & 2) { /* chroma AC residual present */
         }
-        else
-        {
-            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cb)], mb_cache_idx[0], 0);
-            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cr)], mb_cache_idx[0], 0);
+        else {
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cb], mb_cache_idx[0], 0);
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cr], mb_cache_idx[0], 0);
         }
     }
     else
-    if (m_context_variables.chroma_array_type == 2) { // 4:2:2
-        if (cbp_chroma & 0x03)
-        {
+    if (m_context_variables.chroma_array_type == 2) { /* 4:2:2 */
+        if (cbp_chroma & 3) { /* chroma DC residual present */
+            memset(&m_context_variables.coeffs_dc[CC_Cb], 0, 8 * sizeof(dctcoeff));
+            memset(&m_context_variables.coeffs_dc[CC_Cr], 0, 8 * sizeof(dctcoeff));
         }
-        if (cbp_chroma & 0x20)
-        {
+        if (cbp_chroma & 2) { /* chroma AC residual present */
         }
-        else
-        {
-            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cb)], mb_cache_idx[0], 0);
-            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cr)], mb_cache_idx[0], 0);
+        else {
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cb], mb_cache_idx[0], 0);
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cr], mb_cache_idx[0], 0);
         }
     }
-    else { // 4:4:4
+    else { /* 4:4:4 */
         decode_residual(scan4x4, scan8x8, colour_component_e::Cb);
         decode_residual(scan4x4, scan8x8, colour_component_e::Cr);
     }
@@ -940,7 +964,7 @@ void picture_cabac::decode_mb(const h264::slice_header& sh)
                     pred = get_predicted_intra_mode(i * 4);
                     mode = get_intra8x8_pred_mode(pred);
                     curr_mb->intra_luma_pred_mode.m8x8[i] = mode;
-                    mb_cache_fill_rectangle_2x2(m_context_variables.intraNxN_pred_mode, mb_cache_idx[i * 4], mode);
+                    mb_cache_fill_rectangle_2x2(m_context_variables.intraNxN_pred_mode_cache, mb_cache_idx[i * 4], mode);
                 }
             }
             else {
@@ -949,7 +973,7 @@ void picture_cabac::decode_mb(const h264::slice_header& sh)
                     pred = get_predicted_intra_mode(i);
                     mode = get_intra4x4_pred_mode(pred);
                     curr_mb->intra_luma_pred_mode.m4x4[inverse_scanning_4x4[i]] = mode;
-                    m_context_variables.intraNxN_pred_mode[mb_cache_idx[i]] = mode;
+                    m_context_variables.intraNxN_pred_mode_cache[mb_cache_idx[i]] = mode;
                 }
             }
         }
@@ -992,9 +1016,9 @@ void picture_cabac::decode_mb(const h264::slice_header& sh)
         decode_residual();
     }
     else {
-        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Y)],  mb_cache_idx[0], 0);
-        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cb)], mb_cache_idx[0], 0);
-        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count[to_int(colour_component_e::Cr)], mb_cache_idx[0], 0);
+        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Y],  mb_cache_idx[0], 0);
+        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cb], mb_cache_idx[0], 0);
+        mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cr], mb_cache_idx[0], 0);
         m_context_variables.lastQPdelta = 0;
     }
 

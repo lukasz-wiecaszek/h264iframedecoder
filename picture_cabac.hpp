@@ -93,25 +93,25 @@ private:
     int decode_prev_intra8x8_pred_mode_flag();
     int decode_rem_intra8x8_pred_mode();
     int decode_intra_chroma_pred_mode();
-    int decode_coded_block_flag(int ctxBlockCat, int idx);
-    int decode_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
-    int decode_last_significant_coeff_flag(int ctxBlockCat, int ctxIdxInc);
-    int decode_coeff_abs_level_minus1(int ctxBlockCat, int ctxIdxInc);
+    int decode_coded_block_flag(const enum ctx_block_cat_e ctxBlockCat, int idx);
+    int decode_significant_coeff_flag(const enum ctx_block_cat_e ctxBlockCat, int ctxIdxInc);
+    int decode_last_significant_coeff_flag(const enum ctx_block_cat_e ctxBlockCat, int ctxIdxInc);
+    int decode_coeff_abs_level_minus1(const enum ctx_block_cat_e ctxBlockCat, int ctxIdxInc);
 
-    void decode_residual_block(dctcoeff& block,
-                               const enum ctx_block_cat_e cat,
+    void decode_residual_block(dctcoeff* block,
+                               const enum ctx_block_cat_e ctxBlockCat,
                                const int idx,
                                const uint8_t* scantable,
                                const int max_coeff);
 
-    void decode_residual_dc(dctcoeff& block,
-                            const enum ctx_block_cat_e cat,
+    void decode_residual_dc(dctcoeff* block,
+                            const enum ctx_block_cat_e ctxBlockCat,
                             const int idx,
                             const uint8_t* scantable,
                             const int max_coeff);
 
-    void decode_residual_ac(dctcoeff& block,
-                            const enum ctx_block_cat_e cat,
+    void decode_residual_ac(dctcoeff* block,
+                            const enum ctx_block_cat_e ctxBlockCat,
                             const int idx,
                             const uint8_t* scantable,
                             const int max_coeff);

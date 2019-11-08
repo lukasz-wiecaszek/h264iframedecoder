@@ -29,12 +29,15 @@
 /*===========================================================================*\
  * preprocessor #define constants and macros
 \*===========================================================================*/
-#define COLOUR_COMPONENTS \
-    COLOUR_COMPONENT(Y,  0) \
-    COLOUR_COMPONENT(Cb, 1) \
-    COLOUR_COMPONENT(Cr, 2) \
+#define CC_Y   0
+#define CC_Cb  1
+#define CC_Cr  2
+#define CC_MAX 3
 
-#define COLOUR_COMPONENTS_MAX 3
+#define COLOUR_COMPONENTS \
+    COLOUR_COMPONENT(Y,  CC_Y) \
+    COLOUR_COMPONENT(Cb, CC_Cb) \
+    COLOUR_COMPONENT(Cr, CC_Cr) \
 
 /*===========================================================================*\
  * inline function definitions
