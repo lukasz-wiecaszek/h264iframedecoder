@@ -85,9 +85,8 @@ struct mb
     /* luma quantization parameter */
     int luma_qp;
 
-#define MB_NZC_DC_BLOCK_IDX_Y  (16 * CC_MAX + CC_Y)
-#define MB_NZC_DC_BLOCK_IDX_Cb (16 * CC_MAX + CC_Cb)
-#define MB_NZC_DC_BLOCK_IDX_Cr (16 * CC_MAX + CC_Cr)
+#define MB_NZC_AC_BLOCK_IDX(cc, idx) (16 * cc + idx)
+#define MB_NZC_DC_BLOCK_IDX(cc)      (16 * CC_MAX + cc)
     /* Number of non-zero AC coefficiets in 4x4 blocks in Y,Cb and Cr components.
      Last three indexes store number of non-zero DC coefficients in Y,Cb and Cr
      components respectively. */
@@ -107,9 +106,14 @@ inline std::string mb::to_string() const
     int status, n = 0;
 
     status = snprintf(&buf[n], sizeof(buf) - n,
-        "[%d:%2d,%2d], neighbours: [%d,%d,%d,%d], left: %d, top: %d, type: 0x%08x, cbp_luma: 0x%02x, cbp_chroma: %d, luma_qp: %d\n",
+        "[%d:%2d,%2d], neighbours: [%c,%c,%c,%c], left: %c, top: %c, type: 0x%08x, cbp_luma: 0x%02x, cbp_chroma: %d, luma_qp: %d\n",
         slice_num, x, y,
-        A != nullptr, B != nullptr, C != nullptr, D != nullptr, left != nullptr, top != nullptr,
+        A != nullptr ? '+' : '-',
+        B != nullptr ? '+' : '-',
+        C != nullptr ? '+' : '-',
+        D != nullptr ? '+' : '-',
+        left != nullptr ? '+' : '-',
+        top != nullptr ? '+' : '-',
         type, cbp_luma, cbp_chroma, luma_qp);
     assert((status > 0) && (static_cast<size_t>(status) < (sizeof(buf) - n)));
     n += status;

@@ -106,7 +106,7 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
 
         decode_mb(sh); /* macroblock_layer */
 
-        std::cout << mb->to_string();
+        //std::cout << mb->to_string();
     }
 }
 
@@ -305,7 +305,7 @@ void picture_cabac::non_zero_count_save()
     const mb_cache& nzc_cache_cb = m_context_variables.non_zero_count_cache[CC_Cb];
     const mb_cache& nzc_cache_cr = m_context_variables.non_zero_count_cache[CC_Cr];
 
-    nzc[MB_NZC_DC_BLOCK_IDX_Y] = nzc_cache_y[0];
+    nzc[MB_NZC_DC_BLOCK_IDX(CC_Y)] = nzc_cache_y[0];
 
     std::memcpy(&nzc[0 * 4], &nzc_cache_y[1 * 8 + 4], 4);
     std::memcpy(&nzc[1 * 4], &nzc_cache_y[2 * 8 + 4], 4);
@@ -315,8 +315,8 @@ void picture_cabac::non_zero_count_save()
     if (m_context_variables.chroma_array_type == 0)
         return;
 
-    nzc[MB_NZC_DC_BLOCK_IDX_Cb] = nzc_cache_cb[0];
-    nzc[MB_NZC_DC_BLOCK_IDX_Cr] = nzc_cache_cr[0];
+    nzc[MB_NZC_DC_BLOCK_IDX(CC_Cb)] = nzc_cache_cb[0];
+    nzc[MB_NZC_DC_BLOCK_IDX(CC_Cr)] = nzc_cache_cr[0];
 
     std::memcpy(&nzc[4 * 4], &nzc_cache_cb[1 * 8 + 4], 4);
     std::memcpy(&nzc[5 * 4], &nzc_cache_cb[2 * 8 + 4], 4);
@@ -341,7 +341,7 @@ void picture_cabac::non_zero_count_save()
  */
 int picture_cabac::decode_mb_field_decoding_flag()
 {
-    int ctxIdxOffset = 70;
+    const int ctxIdxOffset = 70;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -365,7 +365,7 @@ int picture_cabac::decode_mb_field_decoding_flag()
  */
 int picture_cabac::decode_mb_type_si_slice()
 {
-    int ctxIdxOffset = 0;
+    const int ctxIdxOffset = 0;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -388,7 +388,7 @@ int picture_cabac::decode_mb_type_si_slice()
  */
 int picture_cabac::decode_mb_type_i_slice()
 {
-    int ctxIdxOffset = 3;
+    const int ctxIdxOffset = 3;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -423,7 +423,7 @@ int picture_cabac::decode_mb_type_i_slice()
  */
 int picture_cabac::decode_transform_size_8x8_flag()
 {
-    int ctxIdxOffset = 399;
+    const int ctxIdxOffset = 399;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -442,8 +442,8 @@ int picture_cabac::decode_transform_size_8x8_flag()
  */
 int picture_cabac::decode_cbp_luma()
 {
+    const int ctxIdxOffset = 73;
     int cbp_a, cbp_b, cbp = 0;
-    int ctxIdxOffset = 73;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -479,8 +479,8 @@ int picture_cabac::decode_cbp_luma()
  */
 int picture_cabac::decode_cbp_chroma()
 {
+    const int ctxIdxOffset = 77;
     int cbp_a, cbp_b;
-    int ctxIdxOffset = 77;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -519,8 +519,8 @@ int picture_cabac::decode_cbp_chroma()
  */
 int picture_cabac::decode_mb_qp_delta()
 {
+    const int ctxIdxOffset = 60;
     int qp_delta = 0;
-    int ctxIdxOffset = 60;
     int ctxIdxInc;
 
     ctxIdxInc = (m_context_variables.lastQPdelta != 0) ? 1 : 0;
@@ -549,7 +549,7 @@ int picture_cabac::decode_mb_qp_delta()
  */
 int picture_cabac::decode_prev_intra4x4_pred_mode_flag()
 {
-    int ctxIdxOffset = 68;
+    const int ctxIdxOffset = 68;
     int ctxIdxInc = 0;
 
     return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
@@ -562,8 +562,8 @@ int picture_cabac::decode_prev_intra4x4_pred_mode_flag()
  */
 int picture_cabac::decode_rem_intra4x4_pred_mode()
 {
+    const int ctxIdxOffset = 69;
     int mode = 0;
-    int ctxIdxOffset = 69;
     int ctxIdxInc = 0;
 
     mode += 1 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
@@ -580,7 +580,7 @@ int picture_cabac::decode_rem_intra4x4_pred_mode()
  */
 int picture_cabac::decode_prev_intra8x8_pred_mode_flag()
 {
-    int ctxIdxOffset = 68;
+    const int ctxIdxOffset = 68;
     int ctxIdxInc = 0;
 
     return m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
@@ -593,8 +593,8 @@ int picture_cabac::decode_prev_intra8x8_pred_mode_flag()
  */
 int picture_cabac::decode_rem_intra8x8_pred_mode()
 {
+    const int ctxIdxOffset = 69;
     int mode = 0;
-    int ctxIdxOffset = 69;
     int ctxIdxInc = 0;
 
     mode += 1 * m_cabac_decoder.decode_decision(ctxIdxOffset + ctxIdxInc);
@@ -613,7 +613,7 @@ int picture_cabac::decode_rem_intra8x8_pred_mode()
  */
 int picture_cabac::decode_intra_chroma_pred_mode()
 {
-    int ctxIdxOffset = 64;
+    const int ctxIdxOffset = 64;
     int ctxIdxInc = 0;
     mb* curr_mb = m_context_variables.curr_mb;
 
@@ -831,12 +831,49 @@ void picture_cabac::decode_residual(const uint8_t* scan4x4,
                                     const uint8_t* scan8x8,
                                     colour_component_e cc)
 {
-    static const int ctx_cat[CC_MAX][4] =
+    mb* curr_mb = m_context_variables.curr_mb;
+    uint32_t mb_type = curr_mb->type;
+    int cbp_luma = curr_mb->cbp_luma;
+
+    static const enum ctx_block_cat_e ctx_cat[CC_MAX][4] =
     {
         {CAT_16x16_DC_Y,  CAT_16x16_AC_Y,  CAT_4x4_Y,  CAT_8x8_Y},  // Y
         {CAT_16x16_DC_Cb, CAT_16x16_AC_Cb, CAT_4x4_Cb, CAT_8x8_Cb}, // Cb
         {CAT_16x16_DC_Cr, CAT_16x16_AC_Cr, CAT_4x4_Cr, CAT_8x8_Cr}  // Cr
     };
+
+    if (MB_IS_INTRA_16x16(mb_type)) {
+        memset(&m_context_variables.coeffs_dc[to_int(cc)], 0, 16 * sizeof(dctcoeff));
+        decode_residual_dc(m_context_variables.coeffs_dc[to_int(cc)],
+            ctx_cat[to_int(cc)][0], MB_NZC_DC_BLOCK_IDX(to_int(cc)), scan4x4, 16);
+
+        if (cbp_luma & 0x0F)
+            for (int i4x4 = 0; i4x4 < 16; ++i4x4)
+                decode_residual_ac(&m_context_variables.coeffs_ac[to_int(cc)][16 * i4x4],
+                    ctx_cat[to_int(cc)][1], MB_NZC_AC_BLOCK_IDX(to_int(cc), i4x4), scan4x4 + 1, 15);
+        else
+            mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[to_int(cc)], mb_cache_idx[0], 0);
+    }
+    else {
+        for (int i8x8 = 0; i8x8 < 4; ++i8x8) {
+            if (cbp_luma & (1U << i8x8)) {
+                if (!MB_IS_8x8DCT(mb_type)) {
+                    for (int i4x4 = 0; i4x4 < 4; ++i4x4) {
+                        const int index = i8x8 * 4 + i4x4;
+                        decode_residual_ac(&m_context_variables.coeffs_ac[to_int(cc)][16 * index],
+                            ctx_cat[to_int(cc)][2], MB_NZC_AC_BLOCK_IDX(to_int(cc), index), scan4x4, 16);
+                    }
+                }
+                else {
+                    const int index = i8x8 * 4;
+                    decode_residual_ac(&m_context_variables.coeffs_ac[to_int(cc)][16 * index],
+                        ctx_cat[to_int(cc)][3], MB_NZC_AC_BLOCK_IDX(to_int(cc), index), scan8x8, 64);
+                }
+            }
+            else
+                mb_cache_fill_rectangle_2x2(m_context_variables.non_zero_count_cache[to_int(cc)], mb_cache_idx[4 * i8x8], 0);
+        }
+    }
 }
 
 void picture_cabac::decode_residual()
@@ -865,13 +902,17 @@ void picture_cabac::decode_residual()
             memset(&m_context_variables.coeffs_dc[CC_Cr], 0, 4 * sizeof(dctcoeff));
 
             decode_residual_dc(m_context_variables.coeffs_dc[CC_Cb],
-                CAT_CHROMA_DC, MB_NZC_DC_BLOCK_IDX_Cb, scan_table_chroma_dc, 4);
+                CAT_CHROMA_DC, MB_NZC_DC_BLOCK_IDX(CC_Cb), scan_table_chroma_dc, 4);
             decode_residual_dc(m_context_variables.coeffs_dc[CC_Cr],
-                CAT_CHROMA_DC, MB_NZC_DC_BLOCK_IDX_Cr, scan_table_chroma_dc, 4);
-
-
+                CAT_CHROMA_DC, MB_NZC_DC_BLOCK_IDX(CC_Cr), scan_table_chroma_dc, 4);
         }
         if (cbp_chroma & 2) { /* chroma AC residual present */
+            for (int i4x4 = 0; i4x4 < 4; ++i4x4)
+                decode_residual_ac(&m_context_variables.coeffs_ac[CC_Cb][16 * i4x4],
+                    CAT_CHROMA_AC, MB_NZC_AC_BLOCK_IDX(CC_Cb, i4x4), scan4x4 + 1, 15);
+            for (int i4x4 = 0; i4x4 < 4; ++i4x4)
+                decode_residual_ac(&m_context_variables.coeffs_ac[CC_Cr][16 * i4x4],
+                    CAT_CHROMA_AC, MB_NZC_AC_BLOCK_IDX(CC_Cr, i4x4), scan4x4 + 1, 15);
         }
         else {
             mb_cache_fill_rectangle_4x4(m_context_variables.non_zero_count_cache[CC_Cb], mb_cache_idx[0], 0);
@@ -1001,7 +1042,14 @@ void picture_cabac::decode_mb(const h264::slice_header& sh)
         non_zero_count_cache_init(mb_type);
 
         /* decode mb_qp_delta */
-        m_context_variables.lastQPdelta = qp_delta = decode_mb_qp_delta();
+        /* The decoded value of mb_qp_delta shall be in the range of
+        -( 26 + QpBdOffsetY / 2) to +( 25 + QpBdOffsetY / 2 ), inclusive. */
+        qp_delta = decode_mb_qp_delta();
+        if ((qp_delta < -(26 + 3 * static_cast<int>(m_decoder.m_active_sps->bit_depth_luma_minus8))) ||
+            (qp_delta >  (25 + 3 * static_cast<int>(m_decoder.m_active_sps->bit_depth_luma_minus8))))
+            return;
+
+        m_context_variables.lastQPdelta = qp_delta;
         m_context_variables.QPy += qp_delta;
 
         if (m_context_variables.QPy < 0)
