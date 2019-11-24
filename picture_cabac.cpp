@@ -788,6 +788,124 @@ void picture_cabac::decode_residual_block(dctcoeff* block,
                                           const uint8_t* scantable,
                                           const int max_coeff)
 {
+    /* Table 9-43 – Mapping of scanning position to ctxIdxInc for ctxBlockCat == 5, 9, or 13 */
+    static const int significant_coeff_flag_offset_8x8[2][63] =
+    {
+        { 0, 1, 2, 3, 4, 5, 5, 4, 4, 3, 3, 4, 4, 4, 5, 5,
+          4, 4, 4, 4, 3, 3, 6, 7, 7, 7, 8, 9,10, 9, 8, 7,
+          7, 6,11,12,13,11, 6, 7, 8, 9,14,10, 9, 8, 6,11,
+         12,13,11, 6, 9,14,10, 9,11,12,13,11,14,10,12 },
+        { 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 7, 7, 8, 4, 5,
+          6, 9,10,10, 8,11,12,11, 9, 9,10,10, 8,11,12,11,
+          9, 9,10,10, 8,11,12,11, 9, 9,10,10, 8,13,13, 9,
+          9,10,10, 8,13,13, 9, 9,10,10,14,14,14,14,14 }
+    };
+
+    /* Table 9-43 – Mapping of scanning position to ctxIdxInc for ctxBlockCat == 5, 9, or 13 */
+    static const int last_significant_coeff_flag_offset_8x8[63] =
+    {
+        0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4,
+        5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8
+    };
+
+    int i;
+    int index[64];
+    int coeff_count = 0;
+    const bool is_dc = (idx >= (16 * CC_MAX));
+
+    if (max_coeff != 64) {
+        for(i = 0; i < max_coeff - 1; ++i) {
+            if (decode_significant_coeff_flag(ctxBlockCat, i)) {
+                index[coeff_count++] = i;
+                if (decode_last_significant_coeff_flag(ctxBlockCat, i))
+                    i = max_coeff;
+            }
+        }
+    }
+    else {
+        const bool is_field_mb = m_context_variables.mb_field_decoding_flag;
+        for(i = 0; i < max_coeff - 1; ++i) {
+            if (decode_significant_coeff_flag(ctxBlockCat, significant_coeff_flag_offset_8x8[is_field_mb][i])) {
+                index[coeff_count++] = i;
+                if (decode_last_significant_coeff_flag(ctxBlockCat, last_significant_coeff_flag_offset_8x8[i]))
+                    i = max_coeff;
+            }
+        }
+    }
+    if (i == max_coeff - 1)
+        index[coeff_count++] = i;
+
+    if (is_dc) {
+        mb_cache& nzc_cache = m_context_variables.non_zero_count_cache[idx - 16 * CC_MAX];
+        nzc_cache[0] = coeff_count;
+    }
+    else {
+        mb_cache& nzc_cache = m_context_variables.non_zero_count_cache[idx / 16];
+        const int cache_idx = mb_cache_idx[idx % 16];
+        if (max_coeff == 64)
+            mb_cache_fill_rectangle_2x2(nzc_cache, cache_idx, coeff_count);
+        else
+            nzc_cache[cache_idx] = coeff_count;
+    }
+
+    /* If binIdx is equal to 0, ctxIdxInc is derived by
+       ctxIdxInc = ((numDecodAbsLevelGt1 != 0) ? 0: Min(4, 1 + numDecodAbsLevelEq1)) */
+    static const int coeff_abs_level_bin_idx_eq0[8] =
+    {
+        1, 2, 3, 4, 0, 0, 0, 0
+    };
+
+    /* Otherwise (binIdx is greater than 0), ctxIdxInc is derived by
+       ctxIdxInc = 5 + Min(4 - ((ctxBlockCat == 3) ? 1 : 0), numDecodAbsLevelGt1) */
+    static const int coeff_abs_level_bin_idx_gt0[2][8] =
+    {
+        /* ctxBlockCat == 3 */
+        { 5, 5, 5, 5, 6, 7, 8, 8 },
+        /* ctxBlockCat != 3 */
+        { 5, 5, 5, 5, 6, 7, 8, 9 },
+    };
+
+    static const int coeff_abs_level_transition[2][8] =
+    {
+        /* update node ctx after decoding a coeff_abs_level == 1 */
+        { 1, 2, 3, 3, 4, 5, 6, 7 },
+        /* update node ctx after decoding a coeff_abs_level > 1 */
+        { 4, 4, 4, 4, 5, 6, 7, 7 }
+    };
+
+    for (int node = 0; coeff_count > 0; ) {
+        int ctxIdxInc;
+        int coeff_abs_level;
+        int pos = scantable[index[--coeff_count]];
+
+        ctxIdxInc = coeff_abs_level_bin_idx_eq0[node];
+        if (decode_coeff_abs_level_minus1(ctxBlockCat, ctxIdxInc) == 0) {
+            coeff_abs_level = 1;
+        }
+        else {
+            coeff_abs_level = 2;
+            ctxIdxInc = coeff_abs_level_bin_idx_gt0[ctxBlockCat == 3 ? 0 : 1][node];
+            while (coeff_abs_level < 15 && decode_coeff_abs_level_minus1(ctxBlockCat, ctxIdxInc))
+                coeff_abs_level++;
+
+            if (coeff_abs_level >= 15) {
+                int j = 0;
+                while (m_cabac_decoder.decode_bypass())
+                    j++;
+
+                coeff_abs_level = 1;
+                while (j--)
+                    coeff_abs_level += coeff_abs_level + m_cabac_decoder.decode_bypass();
+
+                coeff_abs_level += 14;
+            }
+        }
+
+        block[pos] = (m_cabac_decoder.decode_bypass() == 0) ? coeff_abs_level : -coeff_abs_level;
+        node = coeff_abs_level_transition[coeff_abs_level == 1 ? 0 : 1][node];
+    }
 }
 
 void picture_cabac::decode_residual_dc(dctcoeff* block,
@@ -810,7 +928,7 @@ void picture_cabac::decode_residual_ac(dctcoeff* block,
                                        const uint8_t* scantable,
                                        const int max_coeff)
 {
-    if (ctxBlockCat != CAT_8x8_Y || m_context_variables.chroma_array_type == 3) {
+    if (max_coeff != 64 || m_context_variables.chroma_array_type == 3) {
         if (decode_coded_block_flag(ctxBlockCat, idx))
             decode_residual_block(block, ctxBlockCat, idx, scantable, max_coeff);
         else {
@@ -823,6 +941,7 @@ void picture_cabac::decode_residual_ac(dctcoeff* block,
         }
     }
     else {
+        /* When coded_block_flag is not present, it shall be inferred to be equal to 1. */
         decode_residual_block(block, ctxBlockCat, idx, scantable, max_coeff);
     }
 }
