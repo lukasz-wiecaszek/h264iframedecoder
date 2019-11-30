@@ -59,43 +59,35 @@ namespace ymn
 namespace h264
 {
 
-struct scaling_list_4x4 : public h264_structure
+template <std::size_t N>
+struct scaling_list_nxn : public h264_structure
 {
-    scaling_list_4x4() :
+    scaling_list_nxn() :
         h264_structure()
     {
+        scaling_list_present_flag = 0;
     }
 
     void set_defaults()
     {
-        scaling_list_present_flag = 0;
         std::memset(scaling_list, 16, sizeof(scaling_list));
+        set_valid(true);
+    }
+
+    void copy(const uint8_t (&src)[N])
+    {
+        std::memcpy(scaling_list, src, sizeof(scaling_list));
+        set_valid(true);
     }
 
     std::string to_string() const override;
 
     uint32_t scaling_list_present_flag;
-    uint8_t  scaling_list[16];
+    uint8_t  scaling_list[N];
 };
 
-struct scaling_list_8x8 : public h264_structure
-{
-    scaling_list_8x8() :
-        h264_structure()
-    {
-    }
-
-    void set_defaults()
-    {
-        scaling_list_present_flag = 0;
-        memset(scaling_list, 16, sizeof(scaling_list));
-    }
-
-    std::string to_string() const override;
-
-    uint32_t scaling_list_present_flag;
-    uint8_t  scaling_list[64];
-};
+using scaling_list_4x4 = scaling_list_nxn<4*4>;
+using scaling_list_8x8 = scaling_list_nxn<8*8>;
 
 struct scaling_matrices : public h264_structure
 {
@@ -111,6 +103,8 @@ struct scaling_matrices : public h264_structure
 
         for (std::size_t i = 0; i < TABLE_ELEMENTS(scaling_matrices_8x8); ++i)
             scaling_matrices_8x8[i].set_defaults();
+
+        set_valid(true);
     }
 
     std::string to_string() const override;
@@ -160,6 +154,7 @@ inline const uint8_t scaling_list_default_8x8[2][64] =
       24, 25, 27, 28, 30, 32, 33, 35 }
 };
 
+template<>
 inline std::string scaling_list_4x4::to_string() const
 {
     std::ostringstream stream;
@@ -179,6 +174,7 @@ inline std::string scaling_list_4x4::to_string() const
     return stream.str();
 }
 
+template<>
 inline std::string scaling_list_8x8::to_string() const
 {
     std::ostringstream stream;

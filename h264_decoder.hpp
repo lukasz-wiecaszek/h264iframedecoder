@@ -80,6 +80,16 @@ public:
         return to_string();
     }
 
+    const int* get_dequant4x4_table(int table_idx, int qp)
+    {
+      return (*m_dequant4x4_coeff[table_idx])[qp];
+    }
+
+    const int* get_dequant8x8_table(int table_idx, int qp)
+    {
+      return (*m_dequant8x8_coeff[table_idx])[qp];
+    }
+
 private:
     void init_chroma_qp_tables();
     void init_dequant4x4_coeff_table();

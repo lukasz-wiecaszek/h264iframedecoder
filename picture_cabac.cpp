@@ -890,6 +890,7 @@ void picture_cabac::decode_residual_block(dctcoeff* block,
             while (coeff_abs_level < 15 && decode_coeff_abs_level_minus1(ctxBlockCat, ctxIdxInc))
                 coeff_abs_level++;
 
+#if 0
             if (coeff_abs_level >= 15) {
                 int j = 0;
                 while (m_cabac_decoder.decode_bypass())
@@ -901,6 +902,7 @@ void picture_cabac::decode_residual_block(dctcoeff* block,
 
                 coeff_abs_level += 14;
             }
+#endif
         }
 
         block[pos] = (m_cabac_decoder.decode_bypass() == 0) ? coeff_abs_level : -coeff_abs_level;

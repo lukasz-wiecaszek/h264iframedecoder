@@ -287,6 +287,7 @@ void picture::calculate_neighbours_part2()
         curr_mb->left_pair[0] = curr_mb->A;
         curr_mb->left_pair[1] = curr_mb->A;
         curr_mb->top = curr_mb->B;
+        m_context_variables.left_blocks = left_block_options[0];
     }
 }
 

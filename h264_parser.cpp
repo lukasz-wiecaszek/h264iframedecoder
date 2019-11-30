@@ -62,7 +62,7 @@ static int h264_parser_nal_to_rbsp(
  * inline function definitions
 \*===========================================================================*/
 template<std::size_t N>
-static inline void parse_scaling_list(istream_be& s, uint8_t (&coeffs)[N], const uint8_t (&defaults)[N])
+static inline void parse_scaling_list(istream_be& s, uint8_t (&coeffs)[N], const uint8_t (&dsl)[N])
 {
     int32_t delta_scale;
     uint8_t last = 8, next = 8;
@@ -79,8 +79,8 @@ static inline void parse_scaling_list(istream_be& s, uint8_t (&coeffs)[N], const
             next = (last + delta_scale) & 0xff;
         }
         if (!i && !next) {
-            /* list is not transmited, we use the one passed by 'defaults' */
-            memcpy(coeffs, defaults, N * sizeof(uint8_t));
+            /* list is not transmited, we use the (d)efault (s)caling (l)ist (dsl) */
+            memcpy(coeffs, dsl, N * sizeof(uint8_t));
             break;
         }
         last = coeffs[scan[i]] = next ? next : last;
@@ -696,6 +696,37 @@ h264_parser_status_e h264_parser::parse_sps(istream_be& s)
                 status = parse_scaling_matrices(s, sps.sm, true, sps.chroma_format_idc);
                 if (!status)
                     break;
+                /* for each list which is not transmited, use the fall-back scaling list
+                   as defined in Table 7-2 – Assignment of mnemonic names to scaling list
+                   indices and specification of fall-back rule */
+                if (!sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].copy(h264::scaling_list_default_4x4[0]);
+                if (!sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cb].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cb].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].scaling_list);
+                if (!sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cr].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cr].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cb].scaling_list);
+                if (!sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].copy(h264::scaling_list_default_4x4[1]);
+                if (!sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cb].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cb].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].scaling_list);
+                if (!sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cr].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cr].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cb].scaling_list);
+
+                if (!sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].copy(h264::scaling_list_default_8x8[0]);
+                if (!sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].scaling_list_present_flag)
+                    sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].copy(h264::scaling_list_default_8x8[1]);
+
+                if (sps.chroma_format_idc == 3) {
+                    if (!sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cb].scaling_list_present_flag)
+                        sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cb].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].scaling_list);
+                    if (!sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cb].scaling_list_present_flag)
+                        sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cb].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].scaling_list);
+                    if (!sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cr].scaling_list_present_flag)
+                        sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cr].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cb].scaling_list);
+                    if (!sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cr].scaling_list_present_flag)
+                        sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cr].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cb].scaling_list);
+                }
             }
             else
                 sps.sm.set_defaults();
@@ -916,6 +947,52 @@ h264_parser_status_e h264_parser::parse_pps(istream_be& s)
                 status = parse_scaling_matrices(s, pps.sm, pps.transform_8x8_mode_flag, sps.chroma_format_idc);
                 if (!status)
                     break;
+                const uint8_t (&fallback_4x4_intra)[16] =
+                    sps.seq_scaling_matrix_present_flag ?
+                        sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].scaling_list : h264::scaling_list_default_4x4[0];
+                const uint8_t (&fallback_4x4_inter)[16] =
+                    sps.seq_scaling_matrix_present_flag ?
+                        sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].scaling_list : h264::scaling_list_default_4x4[1];
+                const uint8_t (&fallback_8x8_intra)[64] =
+                    sps.seq_scaling_matrix_present_flag ?
+                        sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].scaling_list : h264::scaling_list_default_8x8[0];
+                const uint8_t (&fallback_8x8_inter)[64] =
+                    sps.seq_scaling_matrix_present_flag ?
+                        sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].scaling_list : h264::scaling_list_default_8x8[1];
+
+                /* for each list which is not transmited, use the fall-back scaling list
+                   as defined in Table 7-2 – Assignment of mnemonic names to scaling list
+                   indices and specification of fall-back rule */
+                if (!pps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].scaling_list_present_flag)
+                    pps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].copy(fallback_4x4_intra);
+                if (!pps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cb].scaling_list_present_flag)
+                    pps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cb].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Y].scaling_list);
+                if (!pps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cr].scaling_list_present_flag)
+                    pps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cr].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTRA_Cb].scaling_list);
+                if (!pps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].scaling_list_present_flag)
+                    pps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].copy(fallback_4x4_inter);
+                if (!pps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cb].scaling_list_present_flag)
+                    pps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cb].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Y].scaling_list);
+                if (!pps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cr].scaling_list_present_flag)
+                    pps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cr].copy(sps.sm.scaling_matrices_4x4[SL_4x4_INTER_Cb].scaling_list);
+
+                if (pps.transform_8x8_mode_flag) {
+                    if (!pps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].scaling_list_present_flag)
+                        pps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].copy(fallback_8x8_intra);
+                    if (!pps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].scaling_list_present_flag)
+                        pps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].copy(fallback_8x8_inter);
+
+                    if (sps.chroma_format_idc == 3) {
+                        if (!pps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cb].scaling_list_present_flag)
+                            pps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cb].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Y].scaling_list);
+                        if (!pps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cb].scaling_list_present_flag)
+                            pps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cb].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Y].scaling_list);
+                        if (!pps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cr].scaling_list_present_flag)
+                            pps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cr].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTRA_Cb].scaling_list);
+                        if (!pps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cr].scaling_list_present_flag)
+                            pps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cr].copy(sps.sm.scaling_matrices_8x8[SL_8x8_INTER_Cb].scaling_list);
+                    }
+                 }
             }
             else
                 pps.sm = sps.sm; /* copy scaling matrices from corresponding sps */
