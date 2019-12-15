@@ -74,10 +74,10 @@ protected:
     void init_coxtext_variables(const h264::slice_header& sh);
     bool is_mb_available(int n);
     mb* get_mb(int n);
-    mb* curr_mb();
+    void update_mb_pos();
+    mb* advance_mb_pos();
     void calculate_neighbours_part1();
     void calculate_neighbours_part2();
-    void advance_mb_pos();
 
 protected:
     struct context_variables
@@ -93,7 +93,8 @@ protected:
         int QPc[2];
         int chroma_array_type;
 
-        const uint8_t* left_blocks;
+        const int* left_blocks;
+        const int* left_blocks_nzc;
 
         mb_cache intraNxN_pred_mode_cache;
         mb_cache non_zero_count_cache[CC_MAX];

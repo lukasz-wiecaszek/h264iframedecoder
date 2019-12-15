@@ -84,7 +84,7 @@ picture_cabac::~picture_cabac()
 
 void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data& sd)
 {
-    mb* mb;
+    mb* curr_mb;
 
     int slice_qp = std::clamp(
         m_context_variables.QPy - 6 * static_cast<int>(m_decoder.m_active_sps->bit_depth_luma_minus8), 0, 51);
@@ -92,7 +92,15 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
     m_cabac_decoder.init_context_variables(sh, slice_qp);
     m_cabac_decoder.init_decoding_engine(sd);
 
-    for (mb = curr_mb(); (mb = curr_mb()) != nullptr; advance_mb_pos()) {
+    for (curr_mb = m_context_variables.curr_mb; curr_mb != nullptr; curr_mb = advance_mb_pos()) {
+
+        curr_mb->x = m_context_variables.mb_x;
+        curr_mb->y = m_context_variables.mb_y;
+        curr_mb->pos = m_context_variables.mb_pos;
+        curr_mb->slice_num = 0;
+
+        calculate_neighbours_part1();
+
         if ((sh.slice_type != h264::slice_type_e::I) && (sh.slice_type != h264::slice_type_e::SI)) {
             bool is_skipped = true; /* TODO: check for skipped macroblocks */
             if (is_skipped)
@@ -120,7 +128,7 @@ void picture_cabac::decode(const h264::slice_header& sh, const h264::slice_data&
 void picture_cabac::intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pred_flag)
 {
     const mb* curr_mb = m_context_variables.curr_mb;
-    const uint8_t* left_blocks = m_context_variables.left_blocks;
+    const int* left_blocks = m_context_variables.left_blocks;
     mb_cache& ipm_cache = m_context_variables.intraNxN_pred_mode_cache;
 
     if (curr_mb->top && MB_IS_INTRA_NxN(curr_mb->top->type)) {
@@ -158,17 +166,17 @@ void picture_cabac::intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pre
             const mb* left = curr_mb->left_pair[i];
 
             if (MB_IS_INTRA_4x4(left->type)) {
-                ipm_cache[3 + 8 * 1 + 2 * 8 * i] =
+                ipm_cache[3 + 1 * 8 + 2 * 8 * i] =
                     left->intra_luma_pred_mode.m4x4[3 + left_blocks[0 + 2 * i] * 4];
 
-                ipm_cache[3 + 8 * 2 + 2 * 8 * i] =
+                ipm_cache[3 + 2 * 8 + 2 * 8 * i] =
                     left->intra_luma_pred_mode.m4x4[3 + left_blocks[1 + 2 * i] * 4];
             }
             else {
-                ipm_cache[3 + 8 * 1 + 2 * 8 * i] =
+                ipm_cache[3 + 1 * 8 + 2 * 8 * i] =
                     left->intra_luma_pred_mode.m8x8[left_blocks[0 + 2 * i] | 1];
 
-                ipm_cache[3 + 8 * 2 + 2 * 8 * i] =
+                ipm_cache[3 + 2 * 8 + 2 * 8 * i] =
                     left->intra_luma_pred_mode.m8x8[left_blocks[1 + 2 * i] | 1];
             }
         }
@@ -178,8 +186,8 @@ void picture_cabac::intraNxN_pred_mode_cache_init(uint32_t constrained_intra_pre
             if (curr_mb->left_pair[i] == nullptr|| (MB_IS_INTER(curr_mb->left_pair[i]->type) && constrained_intra_pred_flag))
                 pred = -1;
 
-            ipm_cache[3 + 8 * 1 + 2 * 8 * i] = pred;
-            ipm_cache[3 + 8 * 2 + 2 * 8 * i] = pred;
+            ipm_cache[3 + 1 * 8 + 2 * 8 * i] = pred;
+            ipm_cache[3 + 2 * 8 + 2 * 8 * i] = pred;
         }
     }
 }
@@ -217,7 +225,7 @@ int picture_cabac::get_intra8x8_pred_mode(int pred_mode)
 void picture_cabac::non_zero_count_cache_init(uint32_t mb_type)
 {
     const mb* curr_mb = m_context_variables.curr_mb;
-    const uint8_t* left_blocks = m_context_variables.left_blocks;
+    const int* left_blocks = m_context_variables.left_blocks_nzc;
 
     mb_cache& nzc_cache_y  = m_context_variables.non_zero_count_cache[CC_Y];
     mb_cache& nzc_cache_cb = m_context_variables.non_zero_count_cache[CC_Cb];
@@ -255,26 +263,26 @@ void picture_cabac::non_zero_count_cache_init(uint32_t mb_type)
         if (curr_mb->left_pair[i]) {
             const uint8_t* nzc = curr_mb->left_pair[i]->non_zero_count;
 
-            nzc_cache_y[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i]];
-            nzc_cache_y[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i]];
+            nzc_cache_y[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[0 + 2 * i]];
+            nzc_cache_y[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[1 + 2 * i]];
 
             if (m_context_variables.chroma_array_type == 1) {
-                nzc_cache_cb[1 * 8 + 3 + 8 * i] = nzc[left_blocks[8 + 4 + 2 * i]];
-                nzc_cache_cr[1 * 8 + 3 + 8 * i] = nzc[left_blocks[8 + 5 + 2 * i]];
+                nzc_cache_cb[1 * 8 + 3 + 8 * i] = nzc[left_blocks[4 + 2 * i]];
+                nzc_cache_cr[1 * 8 + 3 + 8 * i] = nzc[left_blocks[5 + 2 * i]];
             }
             else
             if (m_context_variables.chroma_array_type == 2) {
-                nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] - 2 + 4 * 4];
-                nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] - 2 + 4 * 4];
-                nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] - 2 + 8 * 4];
-                nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] - 2 + 8 * 4];
+                nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[0 + 2 * i] - 2 + 4 * 4];
+                nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[1 + 2 * i] - 2 + 4 * 4];
+                nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[0 + 2 * i] - 2 + 8 * 4];
+                nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[1 + 2 * i] - 2 + 8 * 4];
             }
             else
             if (m_context_variables.chroma_array_type == 3) {
-                nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] + 4 * 4];
-                nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] + 4 * 4];
-                nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 0 + 2 * i] + 8 * 4];
-                nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[8 + 1 + 2 * i] + 8 * 4];
+                nzc_cache_cb[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[0 + 2 * i] + 4 * 4];
+                nzc_cache_cb[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[1 + 2 * i] + 4 * 4];
+                nzc_cache_cr[1 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[0 + 2 * i] + 8 * 4];
+                nzc_cache_cr[2 * 8 + 3 + 2 * 8 * i] = nzc[left_blocks[1 + 2 * i] + 8 * 4];
             }
             else {
                 /* do nothing */

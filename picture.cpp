@@ -110,11 +110,6 @@ void picture::init_coxtext_variables(const h264::slice_header& sh)
 
     m_context_variables.mb_x = sh.first_mb_in_slice % m_decoder.m_dimensions.mb_width;
     m_context_variables.mb_y = sh.first_mb_in_slice / m_decoder.m_dimensions.mb_width;
-    m_context_variables.mb_pos =
-        m_context_variables.mb_x +
-        m_context_variables.mb_y * m_decoder.m_dimensions.mb_width;
-
-    m_context_variables.curr_mb = nullptr; // it will be evaluated in next_mb()
 
     if (sh.field_pic_flag || m_context_variables.mb_aff_frame)
         m_context_variables.mb_y *= 2;
@@ -122,8 +117,7 @@ void picture::init_coxtext_variables(const h264::slice_header& sh)
     if (m_picture_structure == picture_structure_e::field_bottom)
         m_context_variables.mb_y +=1;
 
-    m_context_variables.curr_mb = nullptr;
-
+    update_mb_pos();
 
     m_context_variables.lastQPdelta = 0;
     m_context_variables.QPy = pps->pic_init_qp_minus26 + 26 + sh.slice_qp_delta;
@@ -135,11 +129,53 @@ void picture::init_coxtext_variables(const h264::slice_header& sh)
         m_context_variables.chroma_array_type = 0;
 
     m_context_variables.left_blocks = nullptr; // it will be evaluated in calculate_neighbours_part2()
+    m_context_variables.left_blocks_nzc = nullptr; // it will be evaluated in calculate_neighbours_part2()
 
     //m_context_variables.intraNxN_pred_mode_cache - it will be initialized during processing of macroblock
     //m_context_variables.non_zero_count           - it will be initialized during processing of macroblock
     //m_context_variables.coeffs_ac                - it will be initialized during processing of macroblock
     //m_context_variables.coeffs_dc                - it will be initialized during processing of macroblock
+}
+
+void picture::update_mb_pos()
+{
+    m_context_variables.mb_pos =
+        m_context_variables.mb_x +
+        m_context_variables.mb_y * m_decoder.m_dimensions.mb_width;
+
+    if (m_context_variables.mb_pos < m_decoder.m_dimensions.mb_num)
+        m_context_variables.curr_mb = &m_mbs[m_context_variables.mb_pos];
+    else
+        m_context_variables.curr_mb = nullptr;
+}
+
+mb* picture::advance_mb_pos()
+{
+    if (m_context_variables.mb_aff_frame) {
+        if ((m_context_variables.mb_y & 1) == 0)
+            m_context_variables.mb_y++; /* move to bottom macroblock of a macroblock pair */
+        else {
+            m_context_variables.mb_y--; /* move to top macroblock of a macroblock pair */
+            m_context_variables.mb_x++; /* move to right macroblock pair */
+            if (m_context_variables.mb_x >= m_decoder.m_dimensions.mb_width) {
+                m_context_variables.mb_x = 0;
+                m_context_variables.mb_y +=2;
+            }
+        }
+    }
+    else {
+        m_context_variables.mb_x++; /* move to right macroblock */
+        if (m_context_variables.mb_x >= m_decoder.m_dimensions.mb_width) {
+            m_context_variables.mb_x = 0;
+            m_context_variables.mb_y++;
+            if (m_picture_structure != picture_structure_e::frame)
+                m_context_variables.mb_y++;
+        }
+    }
+
+    update_mb_pos();
+
+    return m_context_variables.curr_mb;
 }
 
 void picture::calculate_neighbours_part1()
@@ -186,56 +222,68 @@ void picture::calculate_neighbours_part1()
 
 void picture::calculate_neighbours_part2()
 {
-    mb *curr_mb = m_context_variables.curr_mb;
+    mb* curr_mb = m_context_variables.curr_mb;
     int mb_width = m_decoder.m_dimensions.mb_width;
 
-    static const uint8_t left_block_options[4][32] =
+    static const int left_blocks[4][4] =
     {
-        {0, 1, 2, 3, 7, 10, 8, 11, 3 + 0 * 4, 3 + 1 * 4, 3 + 2 * 4, 3 + 3 * 4, 1 + 4 * 4, 1 + 8 * 4, 1 + 5 * 4, 1 + 9 * 4},
-        {2, 2, 3, 3, 8, 11, 8, 11, 3 + 2 * 4, 3 + 2 * 4, 3 + 3 * 4, 3 + 3 * 4, 1 + 5 * 4, 1 + 9 * 4, 1 + 5 * 4, 1 + 9 * 4},
-        {0, 0, 1, 1, 7, 10, 7, 10, 3 + 0 * 4, 3 + 0 * 4, 3 + 1 * 4, 3 + 1 * 4, 1 + 4 * 4, 1 + 8 * 4, 1 + 4 * 4, 1 + 8 * 4},
-        {0, 2, 0, 2, 7, 10, 7, 10, 3 + 0 * 4, 3 + 2 * 4, 3 + 0 * 4, 3 + 2 * 4, 1 + 4 * 4, 1 + 8 * 4, 1 + 4 * 4, 1 + 8 * 4}
+        {0, 1, 2, 3},
+        {2, 2, 3, 3},
+        {0, 0, 1, 1},
+        {0, 2, 0, 2}
+    };
+
+    static const int left_blocks_nzc[4][8] =
+    {
+        {3 + 0 * 4, 3 + 1 * 4, 3 + 2 * 4, 3 + 3 * 4, 1 + 4 * 4, 1 + 8 * 4, 1 + 5 * 4, 1 + 9 * 4},
+        {3 + 2 * 4, 3 + 2 * 4, 3 + 3 * 4, 3 + 3 * 4, 1 + 5 * 4, 1 + 9 * 4, 1 + 5 * 4, 1 + 9 * 4},
+        {3 + 0 * 4, 3 + 0 * 4, 3 + 1 * 4, 3 + 1 * 4, 1 + 4 * 4, 1 + 8 * 4, 1 + 4 * 4, 1 + 8 * 4},
+        {3 + 0 * 4, 3 + 2 * 4, 3 + 0 * 4, 3 + 2 * 4, 1 + 4 * 4, 1 + 8 * 4, 1 + 4 * 4, 1 + 8 * 4}
     };
 
     if (m_context_variables.mb_aff_frame) {
-        mb *mb_ax;
-        mb *mb_bx;
+        mb* mb_ax;
+        mb* mb_bx;
         if (m_context_variables.mb_field_decoding_flag == 0) { /* currMbFrameFlag '1' */
             if ((curr_mb->y & 1) == 0) { /* mbIsTopMbFlag '1' */
                 mb_ax = curr_mb->A;
                 mb_bx = curr_mb->B;
                 if (mb_ax) {
-                    if ((mb_ax->type & MB_TYPE_INTERLACED) == 0) {
+                    if (MB_IS_INTERLACED(mb_ax->type)) { /* current - frame(top), left - field */
                         curr_mb->left_pair[0] = mb_ax;
                         curr_mb->left_pair[1] = mb_ax;
-                        m_context_variables.left_blocks = left_block_options[0];
+                        m_context_variables.left_blocks = left_blocks[2];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[2];
                     }
-                    else {
+                    else { /* current - frame(top), left - frame */
                         curr_mb->left_pair[0] = mb_ax;
                         curr_mb->left_pair[1] = mb_ax;
-                        m_context_variables.left_blocks = left_block_options[2];
+                        m_context_variables.left_blocks = left_blocks[0];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[0];
                     }
                 }
                 if (mb_bx)
-                    curr_mb->top = mb_bx+mb_width;
+                    curr_mb->top = mb_bx + mb_width;
             }
             else { /* mbIsTopMbFlag '0' */
                 mb_ax = curr_mb->A;
                 mb_bx = curr_mb;
                 if (mb_ax) {
-                    if ((mb_ax->type & MB_TYPE_INTERLACED) == 0) {
-                        curr_mb->left_pair[0] = mb_ax+mb_width;
-                        curr_mb->left_pair[1] = mb_ax+mb_width;
-                        m_context_variables.left_blocks = left_block_options[0];
-                    }
-                    else {
+                    if (MB_IS_INTERLACED(mb_ax->type)) { /* current - frame(bottom), left - field */
                         curr_mb->left_pair[0] = mb_ax;
                         curr_mb->left_pair[1] = mb_ax;
-                        m_context_variables.left_blocks = left_block_options[1];
+                        m_context_variables.left_blocks = left_blocks[1];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[1];
+                    }
+                    else { /* current - frame(bottom), left - frame */
+                        curr_mb->left_pair[0] = mb_ax + mb_width;
+                        curr_mb->left_pair[1] = mb_ax + mb_width;
+                        m_context_variables.left_blocks = left_blocks[0];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[0];
                     }
                 }
                 if (mb_bx)
-                    curr_mb->top = mb_bx-mb_width;
+                    curr_mb->top = mb_bx - mb_width;
             }
         }
         else { /* currMbFrameFlag '0' */
@@ -243,41 +291,45 @@ void picture::calculate_neighbours_part2()
                 mb_ax = curr_mb->A;
                 mb_bx = curr_mb->B;
                 if (mb_ax) {
-                    if ((mb_ax->type & MB_TYPE_INTERLACED) == 0) {
-                        curr_mb->left_pair[0] = mb_ax;
-                        curr_mb->left_pair[1] = mb_ax+mb_width;
-                        m_context_variables.left_blocks = left_block_options[3];
-                    }
-                    else {
+                    if (MB_IS_INTERLACED(mb_ax->type)) { /* current - field(top), left - field */
                         curr_mb->left_pair[0] = mb_ax;
                         curr_mb->left_pair[1] = mb_ax;
-                        m_context_variables.left_blocks = left_block_options[0];
+                        m_context_variables.left_blocks = left_blocks[0];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[0];
+                    }
+                    else { /* current - field(top), left - frame */
+                        curr_mb->left_pair[0] = mb_ax;
+                        curr_mb->left_pair[1] = mb_ax + mb_width;
+                        m_context_variables.left_blocks = left_blocks[3];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[3];
                     }
                 }
                 if (mb_bx) {
-                    if ((mb_bx->type & MB_TYPE_INTERLACED) == 0)
-                        curr_mb->top = mb_bx+mb_width;
-                    else
+                    if (MB_IS_INTERLACED(mb_bx->type))
                         curr_mb->top = mb_bx;
+                    else
+                        curr_mb->top = mb_bx + mb_width;
                 }
             }
             else { /* mbIsTopMbFlag '0' */
                 mb_ax = curr_mb->A;
                 mb_bx = curr_mb->B;
                 if (mb_ax) {
-                    if ((mb_ax->type & MB_TYPE_INTERLACED) == 0) {
-                        curr_mb->left_pair[0] = mb_ax;
-                        curr_mb->left_pair[1] = mb_ax+mb_width;
-                        m_context_variables.left_blocks = left_block_options[3];
+                    if (MB_IS_INTERLACED(mb_ax->type)) { /* current - field(bottom), left - field */
+                        curr_mb->left_pair[0] = mb_ax + mb_width;
+                        curr_mb->left_pair[1] = mb_ax + mb_width;
+                        m_context_variables.left_blocks = left_blocks[0];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[0];
                     }
-                    else {
-                        curr_mb->left_pair[0] = mb_ax+mb_width;
-                        curr_mb->left_pair[1] = mb_ax+mb_width;
-                        m_context_variables.left_blocks = left_block_options[0];
+                    else { /* current - field(bottom), left - frame */
+                        curr_mb->left_pair[0] = mb_ax;
+                        curr_mb->left_pair[1] = mb_ax + mb_width;
+                        m_context_variables.left_blocks = left_blocks[3];
+                        m_context_variables.left_blocks_nzc = left_blocks_nzc[3];
                     }
                 }
                 if (mb_bx)
-                    curr_mb->top = mb_bx+mb_width;
+                    curr_mb->top = mb_bx + mb_width;
             }
         }
         curr_mb->left = curr_mb->left_pair[0];
@@ -287,61 +339,9 @@ void picture::calculate_neighbours_part2()
         curr_mb->left_pair[0] = curr_mb->A;
         curr_mb->left_pair[1] = curr_mb->A;
         curr_mb->top = curr_mb->B;
-        m_context_variables.left_blocks = left_block_options[0];
+        m_context_variables.left_blocks = left_blocks[0];
+        m_context_variables.left_blocks_nzc = left_blocks_nzc[0];
     }
-}
-
-void picture::advance_mb_pos()
-{
-    if (m_context_variables.mb_aff_frame) {
-        if ((m_context_variables.mb_y&1) == 0)
-            m_context_variables.mb_y++; /* move to bottom macroblock of a macroblock pair */
-        else {
-            m_context_variables.mb_y--; /* move to top macroblock of a macroblock pair */
-            m_context_variables.mb_x++; /* move to right macroblock pair */
-            if (m_context_variables.mb_x >= m_decoder.m_dimensions.mb_width) {
-                m_context_variables.mb_x = 0;
-                m_context_variables.mb_y +=2;
-            }
-        }
-    }
-    else {
-        m_context_variables.mb_x++; /* move to right macroblock */
-        if (m_context_variables.mb_x >= m_decoder.m_dimensions.mb_width) {
-            m_context_variables.mb_x = 0;
-            m_context_variables.mb_y++;
-            if (m_picture_structure != picture_structure_e::frame)
-                m_context_variables.mb_y++;
-        }
-    }
-
-    m_context_variables.mb_pos =
-        m_context_variables.mb_x +
-        m_context_variables.mb_y * m_decoder.m_dimensions.mb_width;
-}
-
-mb* picture::curr_mb()
-{
-    mb *curr_mb;
-    int n = m_context_variables.mb_pos;
-
-    if (n < m_decoder.m_dimensions.mb_num)
-        curr_mb = &m_mbs[n];
-    else
-        curr_mb = nullptr;
-
-    m_context_variables.curr_mb = curr_mb;
-
-    if (curr_mb != nullptr) {
-        curr_mb->x = m_context_variables.mb_x;
-        curr_mb->y = m_context_variables.mb_y;
-        curr_mb->pos = m_context_variables.mb_pos;
-        curr_mb->slice_num = 0;
-
-        calculate_neighbours_part1();
-    }
-
-    return curr_mb;
 }
 
 /*===========================================================================*\
